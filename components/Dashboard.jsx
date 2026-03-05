@@ -1700,7 +1700,8 @@ function TicketingTab({ shows, artist }) {
     cap: s?.cap || 0,
     ticketPrice: s?.ticketPrice || 0,
     showDate: "",
-    entries: [], // { date, dateType, agents: {Oztix:0,...}, vipSold:0, vipLimit:0, vipIncludesTicket:true, notes }
+    selectedAgents: [], // up to 3 selected for this show
+    entries: [],
     vipLimit: 0,
     vipIncludesTicket: true,
   });
@@ -1714,7 +1715,7 @@ function TicketingTab({ shows, artist }) {
     dateType: "single",
     dateFrom: "",
     dateTo: "",
-    agents: Object.fromEntries(AGENTS.map(a => [a, ""])),
+    agents: {},
     vipSold: "",
     vipLimit: "",
     vipIncludesTicket: true,
@@ -1737,7 +1738,7 @@ function TicketingTab({ shows, artist }) {
       dateType: "single",
       dateFrom: "",
       dateTo: "",
-      agents: Object.fromEntries(AGENTS.map(a => [a, ""])),
+      agents: {},
       vipSold: "",
       vipLimit: "",
       vipIncludesTicket: true,
@@ -1850,12 +1851,38 @@ function TicketingTab({ shows, artist }) {
                   <input type="number" value={r.vipLimit || ""} onChange={e => updRecord(activeShow, "vipLimit", +e.target.value)} style={iS} placeholder="0" />
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input type="checkbox" checked={r.vipIncludesTicket}
-                  onChange={e => updRecord(activeShow, "vipIncludesTicket", e.target.checked)}
-                  style={{ accentColor: C.accent }} />
-                <span style={{ fontSize: 12, color: C.muted }}>VIP package includes ticket (counted in agent totals)</span>
-              </div>
+                <div style={{ marginTop: 10 }}>
+                  <Label>Ticketing Agents for this show (max 3)</Label>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                    {AGENTS.map(a => {
+                      const selected = (r.selectedAgents || []).includes(a);
+                      const atMax = (r.selectedAgents || []).length >= 3 && !selected;
+                      return (
+                        <button key={a} disabled={atMax}
+                          onClick={() => {
+                            const cur = r.selectedAgents || [];
+                            const next = selected ? cur.filter(x => x !== a) : [...cur, a];
+                            updRecord(activeShow, "selectedAgents", next);
+                          }}
+                          style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${selected ? C.accent : C.border}`,
+                            cursor: atMax ? "not-allowed" : "pointer", fontSize: 12, fontWeight: selected ? 700 : 400,
+                            background: selected ? "rgba(249,115,22,0.15)" : C.bg,
+                            color: selected ? C.accent : atMax ? C.muted : C.text, opacity: atMax ? 0.4 : 1 }}>
+                          {a}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(r.selectedAgents || []).length === 0 && (
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 4, fontStyle: "italic" }}>Select up to 3 agents for this show</div>
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                  <input type="checkbox" checked={r.vipIncludesTicket}
+                    onChange={e => updRecord(activeShow, "vipIncludesTicket", e.target.checked)}
+                    style={{ accentColor: C.accent }} />
+                  <span style={{ fontSize: 12, color: C.muted }}>VIP package includes ticket (counted in agent totals)</span>
+                </div>
             </Section>
 
             {/* Countdown */}
@@ -1948,19 +1975,23 @@ function TicketingTab({ shows, artist }) {
                   </div>
                 )}
 
-                {/* Agent counts */}
+                {/* Agent counts — only show selected agents */}
                 <div style={{ marginBottom: 10 }}>
                   <Label>Tickets by Agent</Label>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                    {AGENTS.map(a => (
-                      <div key={a} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 11, color: C.muted, minWidth: 80 }}>{a}</span>
-                        <input type="number" value={newEntry.agents[a] || ""} placeholder="0"
-                          onChange={e => setNewEntry(n => ({...n, agents: {...n.agents, [a]: e.target.value}}))}
-                          style={{ ...iS, width: 80 }} />
-                      </div>
-                    ))}
-                  </div>
+                  {(r.selectedAgents || []).length === 0 ? (
+                    <div style={{ fontSize: 12, color: C.red, fontStyle: "italic" }}>No agents selected for this show — go to show settings above and select up to 3.</div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {(r.selectedAgents || []).map(a => (
+                        <div key={a} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 13, color: C.text, minWidth: 110, fontWeight: 600 }}>{a}</span>
+                          <input type="number" value={newEntry.agents[a] || ""} placeholder="0"
+                            onChange={e => setNewEntry(n => ({...n, agents: {...n.agents, [a]: e.target.value}}))}
+                            style={{ ...iS, width: 120 }} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* VIP */}
@@ -1999,10 +2030,10 @@ function TicketingTab({ shows, artist }) {
               </div>
             ) : (
               <div style={{ background: C.panel, borderRadius: 10, border: `1px solid ${C.border}`, overflow: "hidden" }}>
-                {/* Table header */}
-                <div style={{ display: "grid", gridTemplateColumns: "90px repeat(6, 1fr) 80px 80px 30px", gap: 4, padding: "8px 10px", background: C.card, fontSize: 10, fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>
+                {/* Table header — only selected agents */}
+                <div style={{ display: "grid", gridTemplateColumns: `90px repeat(${(r.selectedAgents||[]).length}, 1fr) 80px 80px 30px`, gap: 4, padding: "8px 10px", background: C.card, fontSize: 10, fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>
                   <span>Date</span>
-                  {AGENTS.map(a => <span key={a}>{a}</span>)}
+                  {(r.selectedAgents||[]).map(a => <span key={a}>{a}</span>)}
                   <span>Total</span>
                   <span>VIP</span>
                   <span></span>
@@ -2014,9 +2045,9 @@ function TicketingTab({ shows, artist }) {
                     ? `${entry.dateFrom?.slice(5)} – ${entry.dateTo?.slice(5)}`
                     : entry.date?.slice(5);
                   return (
-                    <div key={entry.id} style={{ display: "grid", gridTemplateColumns: "90px repeat(6, 1fr) 80px 80px 30px", gap: 4, padding: "7px 10px", borderTop: `1px solid ${C.border}`, alignItems: "center" }}>
+                    <div key={entry.id} style={{ display: "grid", gridTemplateColumns: `90px repeat(${(r.selectedAgents||[]).length}, 1fr) 80px 80px 30px`, gap: 4, padding: "7px 10px", borderTop: `1px solid ${C.border}`, alignItems: "center" }}>
                       <span style={{ fontSize: 11, color: C.muted }}>{dateLabel}</span>
-                      {AGENTS.map(a => (
+                      {(r.selectedAgents||[]).map(a => (
                         <span key={a} style={{ fontSize: 12, color: +entry.agents[a] > 0 ? C.text : C.muted }}>
                           {+entry.agents[a] > 0 ? (+entry.agents[a]).toLocaleString() : "—"}
                         </span>
@@ -2052,8 +2083,8 @@ function TicketingTab({ shows, artist }) {
       const vip = vipCount(latest);
       const days = daysUntil(r.showDate);
       const agentBreakdown = latest
-        ? Object.fromEntries(AGENTS.map(a => [a, +latest.agents[a]||0]))
-        : Object.fromEntries(AGENTS.map(a => [a, 0]));
+        ? Object.fromEntries((r.selectedAgents||[]).map(a => [a, +latest.agents[a]||0]))
+        : Object.fromEntries((r.selectedAgents||[]).map(a => [a, 0]));
       return { r, i, total, pct, revenue, vip, days, agentBreakdown, latest };
     });
 
@@ -2062,6 +2093,7 @@ function TicketingTab({ shows, artist }) {
     const grandRevenue = rows.reduce((a, r) => a + r.revenue, 0);
     const grandVip = rows.reduce((a, r) => a + r.vip, 0);
     const grandPct = grandCap > 0 ? (grandTotal / grandCap * 100) : 0;
+    const allAgents = [...new Set(records.flatMap(r => r.selectedAgents||[]))];
 
     return (
       <div>
@@ -2076,11 +2108,11 @@ function TicketingTab({ shows, artist }) {
         {/* Snapshot table */}
         <div style={{ background: C.panel, borderRadius: 10, border: `1px solid ${C.border}`, overflow: "hidden" }}>
           {/* Header */}
-          <div style={{ display: "grid", gridTemplateColumns: `160px 80px 80px ${AGENTS.map(()=>'70px').join(' ')} 90px 70px 100px 110px`, gap: 4, padding: "8px 12px", background: C.card, fontSize: 10, fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>
+          <div style={{ display: "grid", gridTemplateColumns: `160px 80px 80px ${allAgents.map(()=>'70px').join(' ')} 90px 70px 100px 110px`, gap: 4, padding: "8px 12px", background: C.card, fontSize: 10, fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>
             <span>Show</span>
             <span>Cap</span>
             <span>Total</span>
-            {AGENTS.map(a => <span key={a}>{a}</span>)}
+            {allAgents.map(a => <span key={a}>{a}</span>)}
             <span>VIP</span>
             <span>% Cap</span>
             <span>Est. Revenue</span>
@@ -2088,16 +2120,16 @@ function TicketingTab({ shows, artist }) {
           </div>
 
           {rows.map(({ r, i, total, pct, revenue, vip, days, agentBreakdown }) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: `160px 80px 80px ${AGENTS.map(()=>'70px').join(' ')} 90px 70px 100px 110px`, gap: 4, padding: "8px 12px", borderTop: `1px solid ${C.border}`, alignItems: "center" }}>
+            <div key={i} style={{ display: "grid", gridTemplateColumns: `160px 80px 80px ${allAgents.map(()=>'70px').join(' ')} 90px 70px 100px 110px`, gap: 4, padding: "8px 12px", borderTop: `1px solid ${C.border}`, alignItems: "center" }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{r.city || `Show ${i+1}`}</div>
                 <div style={{ fontSize: 11, color: C.muted }}>{r.venue}</div>
               </div>
               <span style={{ fontSize: 12, color: C.muted }}>{r.cap.toLocaleString()}</span>
               <span style={{ fontSize: 13, fontWeight: 800, color: C.accent }}>{total.toLocaleString()}</span>
-              {AGENTS.map(a => (
-                <span key={a} style={{ fontSize: 12, color: agentBreakdown[a] > 0 ? C.text : C.muted }}>
-                  {agentBreakdown[a] > 0 ? agentBreakdown[a].toLocaleString() : "—"}
+              {allAgents.map(a => (
+                <span key={a} style={{ fontSize: 12, color: (agentBreakdown[a]||0) > 0 ? C.text : C.muted }}>
+                  {(agentBreakdown[a]||0) > 0 ? (agentBreakdown[a]||0).toLocaleString() : "—"}
                 </span>
               ))}
               <span style={{ fontSize: 12, color: C.text }}>{vip > 0 ? vip.toLocaleString() : "—"}</span>
@@ -2115,13 +2147,13 @@ function TicketingTab({ shows, artist }) {
           ))}
 
           {/* Totals row */}
-          <div style={{ display: "grid", gridTemplateColumns: `160px 80px 80px ${AGENTS.map(()=>'70px').join(' ')} 90px 70px 100px 110px`, gap: 4, padding: "10px 12px", borderTop: `2px solid ${C.border}`, background: C.card, alignItems: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: `160px 80px 80px ${allAgents.map(()=>'70px').join(' ')} 90px 70px 100px 110px`, gap: 4, padding: "10px 12px", borderTop: `2px solid ${C.border}`, background: C.card, alignItems: "center" }}>
             <span style={{ fontSize: 12, fontWeight: 800, color: C.text }}>TOUR TOTAL</span>
             <span style={{ fontSize: 12, fontWeight: 700, color: C.muted }}>{grandCap.toLocaleString()}</span>
             <span style={{ fontSize: 14, fontWeight: 900, color: C.accent }}>{grandTotal.toLocaleString()}</span>
-            {AGENTS.map(a => (
+            {allAgents.map(a => (
               <span key={a} style={{ fontSize: 12, fontWeight: 700, color: C.text }}>
-                {rows.reduce((s, r) => s + r.agentBreakdown[a], 0).toLocaleString()}
+                {rows.reduce((s, r) => s + (r.agentBreakdown[a]||0), 0).toLocaleString()}
               </span>
             ))}
             <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{grandVip.toLocaleString()}</span>
