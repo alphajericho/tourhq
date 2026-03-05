@@ -314,6 +314,19 @@ export default function App() {
 
   // ── FX ──
   const [fx, setFx] = useState({ ...DEFAULT_FX });
+  const [fxUpdated, setFxUpdated] = useState(null);
+  const [fxLoading, setFxLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/fx')
+      .then(r => r.json())
+      .then(d => {
+        setFx({ USD: d.USD, GBP: d.GBP, EUR: d.EUR });
+        setFxUpdated(d.updated || null);
+      })
+      .catch(() => {})
+      .finally(() => setFxLoading(false));
+  }, []);
 
   // ── ARTIST ──
   const [artist, setArtist] = useState({ name: "", agent: "", status: "IN CONSIDERATION", dealCurrency: "USD", dealAmt: 0, dealType: "Flat Guarantee" });
@@ -458,6 +471,13 @@ export default function App() {
 
         {/* FX STRIP */}
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ fontSize: 10, color: C.muted, textAlign: "right" }}>
+            {fxLoading ? "Loading rates…" : fxUpdated ? (
+              <span style={{ color: C.green }}>🟢 Live rates</span>
+            ) : (
+              <span style={{ color: C.yellow }}>⚠️ Default rates</span>
+            )}
+          </div>
           {["USD","GBP","EUR"].map(cur => (
             <div key={cur} style={{ display:"flex", alignItems:"center", gap:6 }}>
               <span style={{ fontSize:11, color:C.muted }}>{cur}/AUD</span>
@@ -466,6 +486,16 @@ export default function App() {
                 style={{ width:60, background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 6px", fontSize:12 }} />
             </div>
           ))}
+          {activeTourId && (
+            <div style={{ fontSize: 10, color: C.muted, textAlign: "right", borderLeft: `1px solid ${C.border}`, paddingLeft: 12 }}>
+              <div>Last saved</div>
+              <div style={{ color: C.textDim }}>
+                {tours.find(t => t.id === activeTourId)?.updated_at
+                  ? new Date(tours.find(t => t.id === activeTourId).updated_at).toLocaleString('en-AU', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })
+                  : "Not saved yet"}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
