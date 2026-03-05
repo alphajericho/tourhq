@@ -504,6 +504,7 @@ export default function App() {
         {[
           ["estimator","💰 Budget Estimator"],
           ["showbyshow","📋 Show By Show"],
+          ["ticketing","🎫 Ticket Counts"],
           ["venues","🏟️ Venue Database"],
           ["research","📊 Artist Research"],
         ].map(([id,label]) => <Tab key={id} label={label} active={tab===id} onClick={() => setTab(id)} />)}
@@ -878,6 +879,13 @@ export default function App() {
       {tab === "showbyshow" && (
         <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
           <ShowByShowTab shows={shows} artist={artist} fx={fx} artistAUD={artistAUD} />
+        </div>
+      )}
+
+      {/* ── TICKETING TAB ── */}
+      {tab === "ticketing" && (
+        <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
+          <TicketingTab shows={shows} artist={artist} />
         </div>
       )}
 
@@ -1676,6 +1684,473 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
       <div style={{ background: C.panel, borderRadius: 10, border: `1px solid ${C.border}`, overflow: "hidden" }}>
         {view === "table" ? <TableView /> : <CardView />}
       </div>
+    </div>
+  );
+}
+
+// ─── TICKETING TAB ────────────────────────────────────────────────────────
+const AGENTS = ["Oztix", "Moshtix", "Ticketek", "Ticketmaster", "Silverback", "Other"];
+
+function TicketingTab({ shows, artist }) {
+
+  // Each show gets a ticketing record
+  const blankRecord = (s) => ({
+    city: s?.city || "",
+    venue: s?.venueName || "",
+    cap: s?.cap || 0,
+    ticketPrice: s?.ticketPrice || 0,
+    showDate: "",
+    entries: [], // { date, dateType, agents: {Oztix:0,...}, vipSold:0, vipLimit:0, vipIncludesTicket:true, notes }
+    vipLimit: 0,
+    vipIncludesTicket: true,
+  });
+
+  const [records, setRecords] = useState(() => shows.map(s => blankRecord(s)));
+  const [activeShow, setActiveShow] = useState(0);
+  const [view, setView] = useState("entry"); // "entry" | "snapshot"
+  const [showAddEntry, setShowAddEntry] = useState(false);
+  const [newEntry, setNewEntry] = useState({
+    date: new Date().toISOString().slice(0,10),
+    dateType: "single",
+    dateFrom: "",
+    dateTo: "",
+    agents: Object.fromEntries(AGENTS.map(a => [a, ""])),
+    vipSold: "",
+    vipLimit: "",
+    vipIncludesTicket: true,
+    notes: "",
+  });
+
+  const updRecord = (i, key, val) =>
+    setRecords(prev => prev.map((r, j) => j === i ? { ...r, [key]: val } : r));
+
+  const addEntry = (i) => {
+    const entry = {
+      ...newEntry,
+      agents: { ...newEntry.agents },
+      id: Date.now(),
+    };
+    setRecords(prev => prev.map((r, j) => j === i ? { ...r, entries: [...r.entries, entry] } : r));
+    setShowAddEntry(false);
+    setNewEntry({
+      date: new Date().toISOString().slice(0,10),
+      dateType: "single",
+      dateFrom: "",
+      dateTo: "",
+      agents: Object.fromEntries(AGENTS.map(a => [a, ""])),
+      vipSold: "",
+      vipLimit: "",
+      vipIncludesTicket: true,
+      notes: "",
+    });
+  };
+
+  const deleteEntry = (showIdx, entryId) => {
+    setRecords(prev => prev.map((r, j) => j === showIdx
+      ? { ...r, entries: r.entries.filter(e => e.id !== entryId) }
+      : r
+    ));
+  };
+
+  const daysUntil = (dateStr) => {
+    if (!dateStr) return null;
+    const diff = Math.ceil((new Date(dateStr) - new Date()) / (1000 * 60 * 60 * 24));
+    return diff;
+  };
+
+  const countdownLabel = (dateStr) => {
+    const d = daysUntil(dateStr);
+    if (d === null) return "";
+    if (d < 0) return `${Math.abs(d)}d ago`;
+    if (d === 0) return "TODAY";
+    if (d === 1) return "TOMORROW";
+    if (d < 7) return `${d} days`;
+    const weeks = Math.floor(d / 7);
+    const days = d % 7;
+    return days > 0 ? `${weeks}w ${days}d` : `${weeks} weeks`;
+  };
+
+  const countdownColor = (dateStr) => {
+    const d = daysUntil(dateStr);
+    if (d === null) return C.muted;
+    if (d < 0) return C.muted;
+    if (d <= 7) return C.red;
+    if (d <= 21) return C.yellow;
+    return C.green;
+  };
+
+  const latestEntry = (r) => {
+    if (!r.entries.length) return null;
+    return r.entries[r.entries.length - 1];
+  };
+
+  const totalTickets = (entry, r) => {
+    if (!entry) return 0;
+    const agentTotal = Object.values(entry.agents).reduce((a, v) => a + (+v || 0), 0);
+    // VIP already counted in agent totals if vipIncludesTicket
+    return agentTotal;
+  };
+
+  const vipCount = (entry) => {
+    if (!entry) return 0;
+    return +entry.vipSold || 0;
+  };
+
+  const iS = {
+    background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5,
+    color: C.text, padding: "6px 8px", fontSize: 13, width: "100%"
+  };
+
+  // ── ENTRY VIEW ─────────────────────────────────────────────────────────
+  const EntryView = () => {
+    const r = records[activeShow];
+    if (!r) return null;
+    const latest = latestEntry(r);
+    const total = totalTickets(latest, r);
+    const pct = r.cap > 0 ? (total / r.cap * 100) : 0;
+    const revenue = total * (r.ticketPrice || 0);
+    const vip = vipCount(latest);
+    const vipPct = (latest?.vipLimit || r.vipLimit) > 0 ? (vip / (latest?.vipLimit || r.vipLimit) * 100) : null;
+
+    return (
+      <div>
+        {/* Show selector */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+          {records.map((rec, i) => {
+            const lat = latestEntry(rec);
+            const t = totalTickets(lat, rec);
+            const p = rec.cap > 0 ? Math.round(t / rec.cap * 100) : 0;
+            return (
+              <button key={i} onClick={() => { setActiveShow(i); setShowAddEntry(false); }}
+                style={{ padding: "8px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12,
+                  background: activeShow === i ? C.accent : C.panel, color: activeShow === i ? "#fff" : C.muted,
+                  display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+                <span>{rec.city || `Show ${i+1}`}</span>
+                {lat && <span style={{ fontSize: 10, fontWeight: 400, color: activeShow === i ? "rgba(255,255,255,0.7)" : C.muted }}>{p}% sold</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          {/* LEFT — Show info + current stats */}
+          <div>
+            <Section title={`📍 ${r.city || `Show ${activeShow+1}`} — ${r.venue}`} accent>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                <div><Label>Show Date</Label>
+                  <input type="date" value={r.showDate} onChange={e => updRecord(activeShow, "showDate", e.target.value)} style={iS} />
+                </div>
+                <div><Label>Ticket Price (AUD)</Label>
+                  <input type="number" value={r.ticketPrice || ""} onChange={e => updRecord(activeShow, "ticketPrice", +e.target.value)} style={iS} placeholder="0" />
+                </div>
+                <div><Label>Capacity</Label>
+                  <input type="number" value={r.cap || ""} onChange={e => updRecord(activeShow, "cap", +e.target.value)} style={iS} placeholder="0" />
+                </div>
+                <div><Label>VIP Limit</Label>
+                  <input type="number" value={r.vipLimit || ""} onChange={e => updRecord(activeShow, "vipLimit", +e.target.value)} style={iS} placeholder="0" />
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input type="checkbox" checked={r.vipIncludesTicket}
+                  onChange={e => updRecord(activeShow, "vipIncludesTicket", e.target.checked)}
+                  style={{ accentColor: C.accent }} />
+                <span style={{ fontSize: 12, color: C.muted }}>VIP package includes ticket (counted in agent totals)</span>
+              </div>
+            </Section>
+
+            {/* Countdown */}
+            {r.showDate && (
+              <div style={{ background: C.panel, borderRadius: 10, padding: "14px 16px", marginBottom: 16, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 11, color: C.muted, textTransform: "uppercase" }}>Show Date</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
+                    {new Date(r.showDate).toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'long', year:'numeric' })}
+                  </div>
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: countdownColor(r.showDate) }}>
+                  {countdownLabel(r.showDate)}
+                </div>
+              </div>
+            )}
+
+            {/* Current stats */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10, marginBottom: 16 }}>
+              <div style={{ background: C.panel, borderRadius: 8, padding: "12px 14px", border: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>Tickets Sold</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: C.accent }}>{total.toLocaleString()}</div>
+                <div style={{ fontSize: 11, color: C.muted }}>of {r.cap.toLocaleString()} cap</div>
+              </div>
+              <div style={{ background: C.panel, borderRadius: 8, padding: "12px 14px", border: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>% Capacity</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: pct >= 80 ? C.green : pct >= 50 ? C.yellow : C.text }}>{pct.toFixed(1)}%</div>
+                <div style={{ height: 6, background: C.bg, borderRadius: 3, marginTop: 6 }}>
+                  <div style={{ height: 6, borderRadius: 3, width: `${Math.min(pct,100)}%`, background: pct >= 80 ? C.green : pct >= 50 ? C.yellow : C.accent }} />
+                </div>
+              </div>
+              <div style={{ background: C.panel, borderRadius: 8, padding: "12px 14px", border: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>Est. Revenue</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: C.green }}>{fmt(revenue)}</div>
+                <div style={{ fontSize: 11, color: C.muted }}>@ {fmt(r.ticketPrice)} avg</div>
+              </div>
+              <div style={{ background: C.panel, borderRadius: 8, padding: "12px 14px", border: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>VIP Sold</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: C.text }}>{vip.toLocaleString()}</div>
+                {(r.vipLimit > 0) && (
+                  <div style={{ fontSize: 11, color: C.muted }}>
+                    of {r.vipLimit} limit — {vipPct?.toFixed(0)}%
+                    <div style={{ height: 4, background: C.bg, borderRadius: 2, marginTop: 4 }}>
+                      <div style={{ height: 4, borderRadius: 2, width: `${Math.min(vipPct||0,100)}%`, background: C.accent }} />
+                    </div>
+                  </div>
+                )}
+                {r.vipIncludesTicket && <div style={{ fontSize: 10, color: C.muted, marginTop: 2, fontStyle: "italic" }}>Included in ticket total</div>}
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT — Entry log */}
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>SALES ENTRIES</div>
+              <button onClick={() => setShowAddEntry(true)}
+                style={{ background: C.accent, border: "none", borderRadius: 6, color: "#fff", padding: "7px 14px", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
+                + Add Entry
+              </button>
+            </div>
+
+            {/* Add entry form */}
+            {showAddEntry && (
+              <div style={{ background: C.panel, borderRadius: 10, padding: 16, marginBottom: 14, border: `1px solid ${C.accent}` }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, marginBottom: 10 }}>NEW ENTRY</div>
+
+                {/* Date type */}
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  {["single","range"].map(t => (
+                    <button key={t} onClick={() => setNewEntry(e => ({...e, dateType: t}))}
+                      style={{ padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                        background: newEntry.dateType === t ? C.accent : C.bg, color: newEntry.dateType === t ? "#fff" : C.muted }}>
+                      {t === "single" ? "Single Date" : "Date Range"}
+                    </button>
+                  ))}
+                </div>
+
+                {newEntry.dateType === "single" ? (
+                  <div style={{ marginBottom: 10 }}>
+                    <Label>Date</Label>
+                    <input type="date" value={newEntry.date} onChange={e => setNewEntry(n => ({...n, date: e.target.value}))} style={iS} />
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                    <div><Label>From</Label>
+                      <input type="date" value={newEntry.dateFrom} onChange={e => setNewEntry(n => ({...n, dateFrom: e.target.value}))} style={iS} /></div>
+                    <div><Label>To</Label>
+                      <input type="date" value={newEntry.dateTo} onChange={e => setNewEntry(n => ({...n, dateTo: e.target.value}))} style={iS} /></div>
+                  </div>
+                )}
+
+                {/* Agent counts */}
+                <div style={{ marginBottom: 10 }}>
+                  <Label>Tickets by Agent</Label>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                    {AGENTS.map(a => (
+                      <div key={a} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: C.muted, minWidth: 80 }}>{a}</span>
+                        <input type="number" value={newEntry.agents[a] || ""} placeholder="0"
+                          onChange={e => setNewEntry(n => ({...n, agents: {...n.agents, [a]: e.target.value}}))}
+                          style={{ ...iS, width: 80 }} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* VIP */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                  <div><Label>VIP Sold</Label>
+                    <input type="number" value={newEntry.vipSold || ""} placeholder="0"
+                      onChange={e => setNewEntry(n => ({...n, vipSold: e.target.value}))} style={iS} /></div>
+                  <div><Label>VIP Limit</Label>
+                    <input type="number" value={newEntry.vipLimit || ""} placeholder="0"
+                      onChange={e => setNewEntry(n => ({...n, vipLimit: e.target.value}))} style={iS} /></div>
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <Label>Notes (optional)</Label>
+                  <input value={newEntry.notes} onChange={e => setNewEntry(n => ({...n, notes: e.target.value}))}
+                    style={iS} placeholder="e.g. post presale, after radio campaign…" />
+                </div>
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => addEntry(activeShow)}
+                    style={{ flex: 1, background: C.green, border: "none", borderRadius: 6, color: "#fff", padding: "8px", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                    Save Entry
+                  </button>
+                  <button onClick={() => setShowAddEntry(false)}
+                    style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, color: C.muted, padding: "8px 14px", cursor: "pointer", fontSize: 13 }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Entry history table */}
+            {r.entries.length === 0 ? (
+              <div style={{ background: C.panel, borderRadius: 8, padding: "24px", textAlign: "center", color: C.muted, fontSize: 13, border: `1px solid ${C.border}` }}>
+                No entries yet. Add your first ticket count above.
+              </div>
+            ) : (
+              <div style={{ background: C.panel, borderRadius: 10, border: `1px solid ${C.border}`, overflow: "hidden" }}>
+                {/* Table header */}
+                <div style={{ display: "grid", gridTemplateColumns: "90px repeat(6, 1fr) 80px 80px 30px", gap: 4, padding: "8px 10px", background: C.card, fontSize: 10, fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>
+                  <span>Date</span>
+                  {AGENTS.map(a => <span key={a}>{a}</span>)}
+                  <span>Total</span>
+                  <span>VIP</span>
+                  <span></span>
+                </div>
+                {[...r.entries].reverse().map((entry, ei) => {
+                  const agTotal = Object.values(entry.agents).reduce((a,v) => a + (+v||0), 0);
+                  const entryPct = r.cap > 0 ? (agTotal / r.cap * 100).toFixed(1) : "—";
+                  const dateLabel = entry.dateType === "range"
+                    ? `${entry.dateFrom?.slice(5)} – ${entry.dateTo?.slice(5)}`
+                    : entry.date?.slice(5);
+                  return (
+                    <div key={entry.id} style={{ display: "grid", gridTemplateColumns: "90px repeat(6, 1fr) 80px 80px 30px", gap: 4, padding: "7px 10px", borderTop: `1px solid ${C.border}`, alignItems: "center" }}>
+                      <span style={{ fontSize: 11, color: C.muted }}>{dateLabel}</span>
+                      {AGENTS.map(a => (
+                        <span key={a} style={{ fontSize: 12, color: +entry.agents[a] > 0 ? C.text : C.muted }}>
+                          {+entry.agents[a] > 0 ? (+entry.agents[a]).toLocaleString() : "—"}
+                        </span>
+                      ))}
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: C.accent }}>{agTotal.toLocaleString()}</div>
+                        <div style={{ fontSize: 10, color: C.muted }}>{entryPct}%</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 12, color: C.text }}>{(+entry.vipSold||0) > 0 ? (+entry.vipSold).toLocaleString() : "—"}</div>
+                        {entry.notes && <div style={{ fontSize: 10, color: C.muted, fontStyle: "italic" }}>{entry.notes}</div>}
+                      </div>
+                      <button onClick={() => deleteEntry(activeShow, entry.id)}
+                        style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 16 }}>×</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── NATIONAL SNAPSHOT VIEW ────────────────────────────────────────────
+  const SnapshotView = () => {
+    const rows = records.map((r, i) => {
+      const latest = latestEntry(r);
+      const total = totalTickets(latest, r);
+      const pct = r.cap > 0 ? (total / r.cap * 100) : 0;
+      const revenue = total * (r.ticketPrice || 0);
+      const vip = vipCount(latest);
+      const days = daysUntil(r.showDate);
+      const agentBreakdown = latest
+        ? Object.fromEntries(AGENTS.map(a => [a, +latest.agents[a]||0]))
+        : Object.fromEntries(AGENTS.map(a => [a, 0]));
+      return { r, i, total, pct, revenue, vip, days, agentBreakdown, latest };
+    });
+
+    const grandTotal = rows.reduce((a, r) => a + r.total, 0);
+    const grandCap = rows.reduce((a, r) => a + r.r.cap, 0);
+    const grandRevenue = rows.reduce((a, r) => a + r.revenue, 0);
+    const grandVip = rows.reduce((a, r) => a + r.vip, 0);
+    const grandPct = grandCap > 0 ? (grandTotal / grandCap * 100) : 0;
+
+    return (
+      <div>
+        {/* National summary */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
+          <Stat label="Total Tickets Sold" value={grandTotal.toLocaleString()} color={C.accent} />
+          <Stat label="Overall % Capacity" value={`${grandPct.toFixed(1)}%`} color={grandPct >= 75 ? C.green : grandPct >= 50 ? C.yellow : C.text} />
+          <Stat label="Est. Total Revenue" value={fmt(grandRevenue)} color={C.green} />
+          <Stat label="Total VIP Sold" value={grandVip.toLocaleString()} color={C.text} />
+        </div>
+
+        {/* Snapshot table */}
+        <div style={{ background: C.panel, borderRadius: 10, border: `1px solid ${C.border}`, overflow: "hidden" }}>
+          {/* Header */}
+          <div style={{ display: "grid", gridTemplateColumns: `160px 80px 80px ${AGENTS.map(()=>'70px').join(' ')} 90px 70px 100px 110px`, gap: 4, padding: "8px 12px", background: C.card, fontSize: 10, fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>
+            <span>Show</span>
+            <span>Cap</span>
+            <span>Total</span>
+            {AGENTS.map(a => <span key={a}>{a}</span>)}
+            <span>VIP</span>
+            <span>% Cap</span>
+            <span>Est. Revenue</span>
+            <span>Countdown</span>
+          </div>
+
+          {rows.map(({ r, i, total, pct, revenue, vip, days, agentBreakdown }) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: `160px 80px 80px ${AGENTS.map(()=>'70px').join(' ')} 90px 70px 100px 110px`, gap: 4, padding: "8px 12px", borderTop: `1px solid ${C.border}`, alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{r.city || `Show ${i+1}`}</div>
+                <div style={{ fontSize: 11, color: C.muted }}>{r.venue}</div>
+              </div>
+              <span style={{ fontSize: 12, color: C.muted }}>{r.cap.toLocaleString()}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: C.accent }}>{total.toLocaleString()}</span>
+              {AGENTS.map(a => (
+                <span key={a} style={{ fontSize: 12, color: agentBreakdown[a] > 0 ? C.text : C.muted }}>
+                  {agentBreakdown[a] > 0 ? agentBreakdown[a].toLocaleString() : "—"}
+                </span>
+              ))}
+              <span style={{ fontSize: 12, color: C.text }}>{vip > 0 ? vip.toLocaleString() : "—"}</span>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: pct >= 80 ? C.green : pct >= 50 ? C.yellow : C.text }}>{pct.toFixed(1)}%</div>
+                <div style={{ height: 4, background: C.bg, borderRadius: 2, marginTop: 3, width: 60 }}>
+                  <div style={{ height: 4, borderRadius: 2, width: `${Math.min(pct,100)}%`, background: pct >= 80 ? C.green : pct >= 50 ? C.yellow : C.accent }} />
+                </div>
+              </div>
+              <span style={{ fontSize: 12, color: C.green }}>{fmt(revenue)}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: countdownColor(r.showDate) }}>
+                {r.showDate ? countdownLabel(r.showDate) : "No date set"}
+              </span>
+            </div>
+          ))}
+
+          {/* Totals row */}
+          <div style={{ display: "grid", gridTemplateColumns: `160px 80px 80px ${AGENTS.map(()=>'70px').join(' ')} 90px 70px 100px 110px`, gap: 4, padding: "10px 12px", borderTop: `2px solid ${C.border}`, background: C.card, alignItems: "center" }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: C.text }}>TOUR TOTAL</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.muted }}>{grandCap.toLocaleString()}</span>
+            <span style={{ fontSize: 14, fontWeight: 900, color: C.accent }}>{grandTotal.toLocaleString()}</span>
+            {AGENTS.map(a => (
+              <span key={a} style={{ fontSize: 12, fontWeight: 700, color: C.text }}>
+                {rows.reduce((s, r) => s + r.agentBreakdown[a], 0).toLocaleString()}
+              </span>
+            ))}
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{grandVip.toLocaleString()}</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: grandPct >= 75 ? C.green : C.yellow }}>{grandPct.toFixed(1)}%</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: C.green }}>{fmt(grandRevenue)}</span>
+            <span />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      {/* View toggle */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        {[["entry","📊 Show Entry"], ["snapshot","🗺️ National Snapshot"]].map(([v,l]) => (
+          <button key={v} onClick={() => setView(v)}
+            style={{ padding: "9px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13,
+              background: view === v ? C.accent : C.panel, color: view === v ? "#fff" : C.muted }}>
+            {l}
+          </button>
+        ))}
+        <div style={{ fontSize: 11, color: C.muted, alignSelf: "center", marginLeft: 8 }}>
+          Shows auto-populated from Budget Estimator. Set show dates and add ticket counts per show.
+        </div>
+      </div>
+
+      {view === "entry" ? <EntryView /> : <SnapshotView />}
     </div>
   );
 }
