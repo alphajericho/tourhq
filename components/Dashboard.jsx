@@ -125,6 +125,7 @@ const VENUE_DB = [
   { city:"Launceston", state:"TAS", name:"Saloon Bar",    cap:300,  hire:0,    perHead:5.5 },
 ];
 
+// STATES/CITIES used by Budget Estimator show selector
 const STATES = [...new Set(VENUE_DB.map(v => v.state))].sort();
 const CITIES_BY_STATE = STATES.reduce((acc, s) => {
   acc[s] = [...new Set(VENUE_DB.filter(v => v.state === s).map(v => v.city))].sort();
@@ -946,83 +947,287 @@ export default function App() {
   );
 }
 
+// ─── VENUE CONSTANTS ───────────────────────────────────────────────────────
+const STATE_COLOURS = {
+  NSW: { bg:"rgba(59,130,246,0.18)",  border:"rgba(59,130,246,0.5)",  text:"#93c5fd" },
+  VIC: { bg:"rgba(34,197,94,0.18)",   border:"rgba(34,197,94,0.5)",   text:"#86efac" },
+  QLD: { bg:"rgba(168,85,247,0.18)",  border:"rgba(168,85,247,0.5)",  text:"#d8b4fe" },
+  SA:  { bg:"rgba(249,115,22,0.18)",  border:"rgba(249,115,22,0.5)",  text:"#fdba74" },
+  WA:  { bg:"rgba(234,179,8,0.18)",   border:"rgba(234,179,8,0.5)",   text:"#fde047" },
+  ACT: { bg:"rgba(156,163,175,0.18)", border:"rgba(156,163,175,0.5)", text:"#d1d5db" },
+  NT:  { bg:"rgba(20,184,166,0.18)",  border:"rgba(20,184,166,0.5)",  text:"#5eead4" },
+  TAS: { bg:"rgba(244,63,94,0.15)",   border:"rgba(244,63,94,0.4)",   text:"#fda4af" },
+  INT: { bg:"rgba(99,102,241,0.18)",  border:"rgba(99,102,241,0.5)",  text:"#c7d2fe" },
+  OTH: { bg:"rgba(251,191,36,0.15)",  border:"rgba(251,191,36,0.4)",  text:"#fcd34d" },
+};
+
+const VENUE_STATES = ["NSW","VIC","QLD","SA","WA","ACT","NT","TAS","INT","OTH"];
+
+const VENUE_CITIES = [
+  "Albury","Ballarat","Brisbane","Bundaberg","Byron Bay","Cairns","Canberra",
+  "Central Coast","Coffs Harbour","Darwin","Frankston","Fremantle","Geelong",
+  "Gladstone","Gold Coast","Mackay","Melbourne","Newcastle","Perth",
+  "Rockhampton","Sunshine Coast","Sydney","Townsville","Wollongong","Other"
+];
+
+const BLANK_VENUE = {
+  city:"", customCity:"", state:"NSW", name:"", cap:0,
+  dealType:"flat",   // "flat" | "door"
+  hire:0, production:0, perHead:5.5, notes:""
+};
+
+function StateBadge({ state }) {
+  const sc = STATE_COLOURS[state] || STATE_COLOURS.OTH;
+  return (
+    <span style={{ background: sc.bg, border: `1px solid ${sc.border}`, borderRadius: 4,
+      padding: "2px 7px", fontSize: 11, color: sc.text, fontWeight: 700, textAlign:"center", whiteSpace:"nowrap" }}>
+      {state}
+    </span>
+  );
+}
+
+// ─── VENUE FORM (shared for add + edit) ────────────────────────────────────
+function VenueForm({ initial, onSave, onCancel, title }) {
+  const [v, setV] = useState({ ...BLANK_VENUE, ...initial });
+  const iS = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" };
+
+  const cityLabel = v.city === "Other" ? (v.customCity || "") : v.city;
+
+  return (
+    <div style={{ background:C.panel, borderRadius:10, padding:20, marginBottom:16, border:`1px solid ${C.accent}` }}>
+      <div style={{ fontWeight:700, color:C.accent, marginBottom:14, fontSize:13 }}>{title}</div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 2fr", gap:10, marginBottom:10 }}>
+        {/* State */}
+        <div>
+          <Label>State / Region</Label>
+          <select value={v.state} onChange={e=>setV(x=>({...x,state:e.target.value}))} style={iS}>
+            {VENUE_STATES.map(s=><option key={s} value={s}>{s}{s==="INT"?" — International":s==="OTH"?" — Other":""}</option>)}
+          </select>
+        </div>
+        {/* City */}
+        <div>
+          <Label>City</Label>
+          {v.state === "INT" ? (
+            <input placeholder="City, Country" value={v.city} onChange={e=>setV(x=>({...x,city:e.target.value}))} style={iS} />
+          ) : (
+            <>
+              <select value={v.city} onChange={e=>setV(x=>({...x,city:e.target.value,customCity:""}))} style={iS}>
+                <option value="">— Select —</option>
+                {VENUE_CITIES.map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+              {v.city === "Other" && (
+                <input placeholder="Enter city name" value={v.customCity||""} onChange={e=>setV(x=>({...x,customCity:e.target.value}))}
+                  style={{ ...iS, marginTop:6 }} />
+              )}
+            </>
+          )}
+        </div>
+        {/* Name */}
+        <div>
+          <Label>Venue Name</Label>
+          <input placeholder="e.g. Crowbar Sydney" value={v.name} onChange={e=>setV(x=>({...x,name:e.target.value}))} style={iS} />
+        </div>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr", gap:10, marginBottom:10 }}>
+        {/* Capacity */}
+        <div>
+          <Label>Capacity</Label>
+          <input type="number" placeholder="0" value={v.cap||""} onChange={e=>setV(x=>({...x,cap:+e.target.value}))} style={iS} />
+        </div>
+        {/* Deal type */}
+        <div>
+          <Label>Deal Type</Label>
+          <select value={v.dealType} onChange={e=>setV(x=>({...x,dealType:e.target.value}))} style={iS}>
+            <option value="flat">Flat Hire</option>
+            <option value="door">Door Deal</option>
+          </select>
+        </div>
+        {/* Flat hire — only if flat */}
+        <div>
+          <Label>Flat Hire ($AUD)</Label>
+          <input type="number" placeholder="0" value={v.hire||""} disabled={v.dealType==="door"}
+            onChange={e=>setV(x=>({...x,hire:+e.target.value}))}
+            style={{ ...iS, opacity: v.dealType==="door" ? 0.4 : 1 }} />
+        </div>
+        {/* Production */}
+        <div>
+          <Label>Production Cost ($)</Label>
+          <input type="number" placeholder="0" value={v.production||""} onChange={e=>setV(x=>({...x,production:+e.target.value}))} style={iS} />
+        </div>
+        {/* Per head */}
+        <div>
+          <Label>Per Head ($)</Label>
+          <input type="number" step="0.5" placeholder="5.50" value={v.perHead||""} onChange={e=>setV(x=>({...x,perHead:+e.target.value}))} style={iS} />
+        </div>
+      </div>
+
+      {/* Notes */}
+      <div style={{ marginBottom:12 }}>
+        <Label>Notes</Label>
+        <textarea placeholder="e.g. Loading dock rear lane, PA available, 18+ only, contact: Joe 0400..."
+          value={v.notes||""} onChange={e=>setV(x=>({...x,notes:e.target.value}))} rows={2}
+          style={{ ...iS, resize:"vertical" }} />
+      </div>
+
+      <div style={{ display:"flex", gap:8 }}>
+        <button onClick={() => {
+          const cityFinal = v.state === "INT" ? v.city : (v.city === "Other" ? (v.customCity || "Other") : v.city);
+          if (!v.name || !cityFinal) return;
+          onSave({ ...v, city: cityFinal });
+        }} style={{ background:C.green, border:"none", borderRadius:6, color:"#fff", padding:"8px 24px", cursor:"pointer", fontWeight:700, fontSize:13 }}>
+          Save Venue
+        </button>
+        <button onClick={onCancel} style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, padding:"8px 20px", cursor:"pointer", fontSize:13 }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── VENUE DATABASE TAB ────────────────────────────────────────────────────
 function VenueTab() {
   const [filter, setFilter] = useState({ state: "ALL", search: "" });
-  const [venues, setVenues] = useState(VENUE_DB);
+  const [venues, setVenues] = useState(() =>
+    VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i }))
+  );
   const [adding, setAdding] = useState(false);
-  const [newV, setNewV] = useState({ city:"", state:"NSW", name:"", cap:0, hire:0, perHead:5.5 });
+  const [editingId, setEditingId] = useState(null);
 
   const filtered = venues.filter(v =>
     (filter.state === "ALL" || v.state === filter.state) &&
     (filter.search === "" || v.name.toLowerCase().includes(filter.search.toLowerCase()) || v.city.toLowerCase().includes(filter.search.toLowerCase()))
   );
 
-  const addVenue = () => {
-    if (!newV.name || !newV.city) return;
-    setVenues(v => [...v, { ...newV }]);
+  const addVenue = (v) => {
+    setVenues(prev => [...prev, { ...v, _id: Date.now() }]);
     setAdding(false);
-    setNewV({ city:"", state:"NSW", name:"", cap:0, hire:0, perHead:5.5 });
   };
 
-  const states = ["ALL", ...STATES];
+  const saveEdit = (id, v) => {
+    setVenues(prev => prev.map(x => x._id === id ? { ...v, _id: id } : x));
+    setEditingId(null);
+  };
+
+  const deleteVenue = (id) => {
+    if (window.confirm("Delete this venue?")) {
+      setVenues(prev => prev.filter(x => x._id !== id));
+    }
+  };
+
+  const filterStates = ["ALL", ...VENUE_STATES];
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, alignItems: "center" }}>
-        <select value={filter.state} onChange={e => setFilter(f=>({...f,state:e.target.value}))}
-          style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: "8px 12px", fontSize: 13 }}>
-          {states.map(s => <option key={s}>{s}</option>)}
+      {/* Toolbar */}
+      <div style={{ display:"flex", gap:10, marginBottom:16, alignItems:"center", flexWrap:"wrap" }}>
+        <select value={filter.state} onChange={e=>setFilter(f=>({...f,state:e.target.value}))}
+          style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"8px 12px", fontSize:13 }}>
+          {filterStates.map(s=><option key={s} value={s}>{s === "ALL" ? "All Regions" : s}</option>)}
         </select>
-        <input placeholder="Search venues…" value={filter.search} onChange={e => setFilter(f=>({...f,search:e.target.value}))}
-          style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: "8px 12px", fontSize: 13, flex: 1 }} />
-        <button onClick={() => setAdding(true)}
-          style={{ background: C.accent, border: "none", borderRadius: 6, color: "#fff", padding: "8px 16px", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+        <input placeholder="Search venues or cities…" value={filter.search} onChange={e=>setFilter(f=>({...f,search:e.target.value}))}
+          style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"8px 12px", fontSize:13, flex:1, minWidth:200 }} />
+        <button onClick={()=>{setAdding(true);setEditingId(null);}}
+          style={{ background:C.accent, border:"none", borderRadius:6, color:"#fff", padding:"8px 18px", cursor:"pointer", fontWeight:700, fontSize:13, whiteSpace:"nowrap" }}>
           + Add Venue
         </button>
       </div>
 
+      {/* State colour legend */}
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:14 }}>
+        {VENUE_STATES.map(s => {
+          const sc = STATE_COLOURS[s];
+          const count = venues.filter(v => v.state === s).length;
+          if (!count) return null;
+          return (
+            <button key={s} onClick={()=>setFilter(f=>({...f, state: f.state===s?"ALL":s}))}
+              style={{ background: filter.state===s ? sc.bg : "transparent",
+                border:`1px solid ${filter.state===s ? sc.border : C.border}`,
+                borderRadius:6, color: filter.state===s ? sc.text : C.muted,
+                padding:"4px 10px", cursor:"pointer", fontSize:11, fontWeight:700 }}>
+              {s} <span style={{ fontWeight:400, opacity:0.7 }}>({count})</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Add form */}
       {adding && (
-        <div style={{ background: C.panel, borderRadius: 8, padding: 16, marginBottom: 16, border: `1px solid ${C.accent}` }}>
-          <div style={{ fontWeight: 700, color: C.accent, marginBottom: 12 }}>NEW VENUE</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
-            <input placeholder="City" value={newV.city} onChange={e=>setNewV(v=>({...v,city:e.target.value}))}
-              style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13 }} />
-            <select value={newV.state} onChange={e=>setNewV(v=>({...v,state:e.target.value}))}
-              style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13 }}>
-              {STATES.map(s=><option key={s}>{s}</option>)}
-            </select>
-            <input placeholder="Venue Name" value={newV.name} onChange={e=>setNewV(v=>({...v,name:e.target.value}))}
-              style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, gridColumn:"span 2" }} />
-            <input type="number" placeholder="Capacity" value={newV.cap} onChange={e=>setNewV(v=>({...v,cap:+e.target.value}))}
-              style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13 }} />
-            <input type="number" placeholder="Hire $" value={newV.hire} onChange={e=>setNewV(v=>({...v,hire:+e.target.value}))}
-              style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13 }} />
-          </div>
-          <div style={{ display:"flex", gap:8, marginTop:10 }}>
-            <button onClick={addVenue} style={{ background:C.accent, border:"none", borderRadius:6, color:"#fff", padding:"8px 20px", cursor:"pointer", fontWeight:700 }}>Save</button>
-            <button onClick={()=>setAdding(false)} style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, padding:"8px 20px", cursor:"pointer" }}>Cancel</button>
-          </div>
-        </div>
+        <VenueForm title="NEW VENUE" initial={BLANK_VENUE}
+          onSave={addVenue} onCancel={()=>setAdding(false)} />
       )}
 
-      <div style={{ background: C.panel, borderRadius: 8, border: `1px solid ${C.border}`, overflow:"hidden" }}>
-        <div style={{ display:"grid", gridTemplateColumns:"80px 120px 1fr 100px 120px 100px", background:C.bg, padding:"10px 16px", fontSize:11, color:C.muted, textTransform:"uppercase", letterSpacing:1, gap:8 }}>
-          <span>State</span><span>City</span><span>Venue</span><span>Capacity</span><span>Flat Hire</span><span>Per Head</span>
-        </div>
-        {filtered.map((v, i) => (
-          <div key={i} style={{ display:"grid", gridTemplateColumns:"80px 120px 1fr 100px 120px 100px", padding:"10px 16px", borderTop:`1px solid ${C.border}`, fontSize:13, gap:8, alignItems:"center" }}>
-            <span style={{ background:C.card, borderRadius:4, padding:"2px 6px", fontSize:11, color:C.accent, fontWeight:700, textAlign:"center" }}>{v.state}</span>
-            <span style={{ color:C.textDim }}>{v.city}</span>
-            <span style={{ color:C.text, fontWeight:600 }}>{v.name}</span>
-            <span style={{ color:C.text }}>{v.cap.toLocaleString()}</span>
-            <span style={{ color: v.hire > 0 ? C.text : C.muted }}>{v.hire > 0 ? fmt(v.hire) : "Door deal"}</span>
-            <span style={{ color:C.textDim }}>{fmt(v.perHead)}</span>
+      {/* Venue list */}
+      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+        {filtered.length === 0 && (
+          <div style={{ background:C.panel, borderRadius:8, padding:24, textAlign:"center", color:C.muted, border:`1px solid ${C.border}` }}>
+            No venues found.
           </div>
-        ))}
-        <div style={{ padding:"10px 16px", fontSize:12, color:C.muted, borderTop:`1px solid ${C.border}` }}>
-          Showing {filtered.length} of {venues.length} venues
-        </div>
+        )}
+        {filtered.map(v => {
+          const sc = STATE_COLOURS[v.state] || STATE_COLOURS.OTH;
+          const isEditing = editingId === v._id;
+          return (
+            <div key={v._id}>
+              {isEditing ? (
+                <VenueForm title={`EDITING — ${v.name}`} initial={v}
+                  onSave={(updated) => saveEdit(v._id, updated)}
+                  onCancel={()=>setEditingId(null)} />
+              ) : (
+                <div style={{ background:C.panel, borderRadius:8, border:`1px solid ${C.border}`,
+                  borderLeft:`3px solid ${sc.border}`, padding:"12px 16px",
+                  display:"grid", gridTemplateColumns:"70px 110px 1fr 90px 110px 110px 100px 80px", gap:8, alignItems:"center" }}>
+                  <StateBadge state={v.state} />
+                  <span style={{ fontSize:12, color:C.textDim }}>{v.city}</span>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:C.text }}>{v.name}</div>
+                    {v.notes && <div style={{ fontSize:11, color:C.muted, fontStyle:"italic", marginTop:2 }}>{v.notes}</div>}
+                  </div>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:C.text }}>{v.cap.toLocaleString()}</div>
+                    <div style={{ fontSize:10, color:C.muted }}>cap</div>
+                  </div>
+                  <div style={{ textAlign:"center" }}>
+                    {v.dealType === "door" ? (
+                      <span style={{ fontSize:12, color:C.yellow, fontWeight:700, background:"rgba(234,179,8,0.12)", borderRadius:4, padding:"2px 8px" }}>Door Deal</span>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize:13, color:C.text }}>{fmt(v.hire)}</div>
+                        <div style={{ fontSize:10, color:C.muted }}>flat hire</div>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:13, color: v.production > 0 ? C.text : C.muted }}>
+                      {v.production > 0 ? fmt(v.production) : "—"}
+                    </div>
+                    <div style={{ fontSize:10, color:C.muted }}>production</div>
+                  </div>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:13, color:C.textDim }}>{fmt(v.perHead)}</div>
+                    <div style={{ fontSize:10, color:C.muted }}>per head</div>
+                  </div>
+                  <div style={{ display:"flex", gap:6, justifyContent:"flex-end" }}>
+                    <button onClick={()=>{setEditingId(v._id);setAdding(false);}}
+                      style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:5, color:C.textDim, padding:"5px 10px", cursor:"pointer", fontSize:11, fontWeight:600 }}>
+                      Edit
+                    </button>
+                    <button onClick={()=>deleteVenue(v._id)}
+                      style={{ background:"none", border:`1px solid rgba(239,68,68,0.3)`, borderRadius:5, color:C.red, padding:"5px 10px", cursor:"pointer", fontSize:11 }}>
+                      ×
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ padding:"12px 0", fontSize:12, color:C.muted, marginTop:4 }}>
+        Showing {filtered.length} of {venues.length} venues
       </div>
     </div>
   );
