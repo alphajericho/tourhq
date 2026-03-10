@@ -190,6 +190,99 @@ function Section({ title, children, accent }) {
     </div>
   );
 }
+// ─── CALENDAR DATE PICKER ─────────────────────────────────────────────────
+function CalendarPicker({ value, onChange, style = {} }) {
+  const [open, setOpen] = useState(false);
+  const [viewYear, setViewYear] = useState(() => {
+    const d = value ? new Date(value + "T00:00:00") : new Date();
+    return d.getFullYear();
+  });
+  const [viewMonth, setViewMonth] = useState(() => {
+    const d = value ? new Date(value + "T00:00:00") : new Date();
+    return d.getMonth();
+  });
+
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const DAYS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+  const selectDate = (y, m, d) => {
+    const str = `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    onChange(str);
+    setOpen(false);
+  };
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  };
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const selParts = value ? value.split("-") : null;
+  const isSelected = (d) => selParts && +selParts[0]===viewYear && +selParts[1]-1===viewMonth && +selParts[2]===d;
+
+  const displayVal = value
+    ? new Date(value + "T00:00:00").toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" })
+    : "Select date…";
+
+  return (
+    <div style={{ position:"relative", ...style }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{ width:"100%", background:C.bg, border:`1px solid ${open ? C.accent : C.border}`, borderRadius:5,
+          color: value ? C.text : C.muted, padding:"6px 10px", fontSize:13, cursor:"pointer",
+          textAlign:"left", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <span>{displayVal}</span>
+        <span style={{ fontSize:10, color:C.muted }}>📅</span>
+      </button>
+      {open && (
+        <div style={{ position:"absolute", zIndex:9999, top:"100%", left:0, marginTop:4, background:C.card,
+          border:`1px solid ${C.accent}`, borderRadius:10, padding:12, width:240, boxShadow:"0 8px 30px rgba(0,0,0,0.5)" }}>
+          {/* Month nav */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+            <button type="button" onClick={prevMonth}
+              style={{ background:"none", border:"none", color:C.accent, cursor:"pointer", fontSize:16, padding:"0 6px" }}>‹</button>
+            <span style={{ fontSize:13, fontWeight:700, color:C.text }}>{MONTHS[viewMonth]} {viewYear}</span>
+            <button type="button" onClick={nextMonth}
+              style={{ background:"none", border:"none", color:C.accent, cursor:"pointer", fontSize:16, padding:"0 6px" }}>›</button>
+          </div>
+          {/* Day headers */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:4 }}>
+            {DAYS.map(d => <div key={d} style={{ fontSize:10, color:C.muted, textAlign:"center", fontWeight:700 }}>{d}</div>)}
+          </div>
+          {/* Date cells */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
+            {cells.map((d, i) => d === null ? <div key={`e${i}`} /> : (
+              <button key={d} type="button" onClick={() => selectDate(viewYear, viewMonth, d)}
+                style={{ padding:"5px 0", borderRadius:5, border:"none", cursor:"pointer", fontSize:12, textAlign:"center",
+                  fontWeight: isSelected(d) ? 800 : 400,
+                  background: isSelected(d) ? C.accent : "transparent",
+                  color: isSelected(d) ? "#fff" : C.text }}>
+                {d}
+              </button>
+            ))}
+          </div>
+          {/* Clear */}
+          {value && (
+            <button type="button" onClick={() => { onChange(""); setOpen(false); }}
+              style={{ marginTop:8, width:"100%", background:"none", border:`1px solid ${C.border}`, borderRadius:5,
+                color:C.muted, fontSize:11, padding:"5px", cursor:"pointer" }}>
+              Clear date
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Tab({ label, active, onClick }) {
   return (
     <button
@@ -461,7 +554,7 @@ export default function App() {
       {/* HEADER */}
       <div style={{ background: C.panel, borderBottom: `2px solid ${C.accent}`, padding: "12px 24px", display: "flex", alignItems: "center", gap: 16 }}>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: C.accent, letterSpacing: -0.5 }}>🎸 TOUR HQ</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: C.accent, letterSpacing: -0.5 }}>UDO</div>
           <div style={{ fontSize: 11, color: C.muted }}>Silverback / Tribute / Delta Bravo</div>
         </div>
 
@@ -1248,6 +1341,8 @@ function ResearchTab() {
   const [searching, setSearching] = useState(false);
   const [searchLog, setSearchLog] = useState([]);
   const [searchDone, setSearchDone] = useState(false);
+  const [similarArtists, setSimilarArtists] = useState([]);
+  const [loadingSimilar, setLoadingSimilar] = useState(false);
 
   const iS = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"6px 8px", fontSize:12, width:"100%" };
 
@@ -1257,12 +1352,36 @@ function ResearchTab() {
 
   const log = (msg) => setSearchLog(l => [...l, msg]);
 
+  const fetchSimilarArtists = async (artistName) => {
+    if (!artistName.trim()) return;
+    setLoadingSimilar(true);
+    setSimilarArtists([]);
+    try {
+      const url = `https://ws.audioscrobbler.com/2.0/?method=artist.getSimilar&artist=${encodeURIComponent(artistName)}&api_key=f5e5b39b2fcb33bf3e4e5e39c5a3be3f&limit=10&format=json`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.similarartists?.artist?.length) {
+        setSimilarArtists(data.similarartists.artist.map(a => ({
+          name: a.name,
+          match: parseFloat(a.match),
+          url: a.url,
+        })));
+      } else {
+        setSimilarArtists([]);
+      }
+    } catch (e) {
+      setSimilarArtists([]);
+    }
+    setLoadingSimilar(false);
+  };
+
   const runSearch = async () => {
     if (!r.artist.trim()) return;
     setSearching(true);
     setSearchDone(false);
     setSearchLog([]);
     log(`🔍 Starting research on: ${r.artist}`);
+    fetchSimilarArtists(r.artist);
 
   
 
@@ -1512,6 +1631,47 @@ function ResearchTab() {
           rows={4} placeholder="Career snapshot, market notes, observations from research…"
           style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"10px", width:"100%", fontSize:13, resize:"vertical" }} />
       </Section>
+
+      {/* SIMILAR ARTISTS (Last.fm) */}
+      <Section title="🎵 Similar Artists — Last.fm">
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+          <div style={{ fontSize:12, color:C.muted, flex:1 }}>Top similar artists by match score. Useful for market positioning and support act research.</div>
+          <button onClick={()=>fetchSimilarArtists(r.artist)} disabled={!r.artist.trim() || loadingSimilar}
+            style={{ background:loadingSimilar?C.panel:C.accent, border:"none", borderRadius:6, color:loadingSimilar?C.muted:"#fff",
+              padding:"7px 16px", cursor:(!r.artist.trim()||loadingSimilar)?"not-allowed":"pointer", fontWeight:700, fontSize:12 }}>
+            {loadingSimilar ? "Loading…" : "Fetch Similar Artists"}
+          </button>
+        </div>
+        {loadingSimilar && (
+          <div style={{ textAlign:"center", padding:"20px", color:C.muted, fontSize:13 }}>⏳ Searching Last.fm…</div>
+        )}
+        {!loadingSimilar && similarArtists.length === 0 && r.artist && (
+          <div style={{ textAlign:"center", padding:"16px", color:C.muted, fontSize:12, fontStyle:"italic" }}>
+            No results yet — enter an artist name above and click Fetch, or run the full research search.
+          </div>
+        )}
+        {!loadingSimilar && similarArtists.length > 0 && (
+          <div>
+            {similarArtists.map((a, i) => (
+              <div key={a.name} style={{ display:"grid", gridTemplateColumns:"24px 1fr 80px", gap:10, alignItems:"center",
+                padding:"8px 10px", borderBottom:`1px solid ${C.border}`, background: i%2===0 ? "transparent" : "rgba(255,255,255,0.02)" }}>
+                <span style={{ fontSize:13, fontWeight:800, color:C.muted }}>#{i+1}</span>
+                <div>
+                  <span style={{ fontSize:14, fontWeight:700, color:C.text }}>{a.name}</span>
+                  <a href={a.url} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize:10, color:C.accent, marginLeft:8, textDecoration:"none" }}>↗ Last.fm</a>
+                </div>
+                <div>
+                  <div style={{ fontSize:11, color:C.muted, marginBottom:2 }}>{(a.match * 100).toFixed(0)}% match</div>
+                  <div style={{ height:4, background:C.bg, borderRadius:2 }}>
+                    <div style={{ height:4, borderRadius:2, width:`${a.match*100}%`, background:C.accent }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
     </div>
   );
 }
@@ -1567,7 +1727,34 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
     prodAddOns: 0,
     marketing: 0,
     notes: "",
+    vipSold: 0,
+    vipIncludesTicket: true,
   });
+
+  // ── VIP PACKAGE COSTS (national) ──
+  const blankVipItem = () => ({ label: "Poster", cost: 0 });
+  const VIP_ITEM_LABELS = ["Poster", "Laminate", "Lanyard", "Other"];
+  const [vipItems, setVipItems] = useState([
+    { label: "Poster", cost: 0 },
+    { label: "Laminate", cost: 0 },
+    { label: "Lanyard", cost: 0 },
+  ]);
+  const [vipShowItems, setVipShowItems] = useState(false);
+
+  // ── DEPOSIT TRACKER ──
+  const blankDeposit = () => ({ id: Date.now(), description: "Artist deposit", amount: 0, dueDate: "", paidDate: "", paid: false, notes: "" });
+  const [deposits, setDeposits] = useState([]);
+  const [showAddDeposit, setShowAddDeposit] = useState(false);
+  const [newDeposit, setNewDeposit] = useState(blankDeposit());
+
+  const addDeposit = () => {
+    setDeposits(d => [...d, { ...newDeposit, id: Date.now() }]);
+    setNewDeposit(blankDeposit());
+    setShowAddDeposit(false);
+  };
+  const updDeposit = (id, key, val) => setDeposits(d => d.map(x => x.id === id ? { ...x, [key]: val } : x));
+  const delDeposit = (id) => setDeposits(d => d.filter(x => x.id !== id));
+
 
   const [showData, setShowData] = useState(() => shows.map(s => blankShow(s)));
   const [view, setView] = useState("table"); // "table" | "card"
@@ -1627,7 +1814,18 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
     plSellOut: calcs.reduce((a, c) => a + c.plSellOut, 0),
   };
 
-  const iS = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, padding: "5px 7px", fontSize: 12, width: "100%" };
+  // ── VIP CALCULATIONS ──
+  // National: total item cost per package + 10% prep fee
+  const vipRawCost = vipItems.reduce((a, x) => a + (+x.cost || 0), 0);
+  const vipPrepFee = vipRawCost * 0.10;
+  const vipTotalCostPerPkg = vipRawCost + vipPrepFee;
+
+  // Deposit calculations
+  const totalDepositsOwed = deposits.reduce((a, d) => a + (+d.amount || 0), 0);
+  const totalDepositsPaid = deposits.filter(d => d.paid).reduce((a, d) => a + (+d.amount || 0), 0);
+  const depositBalance = totalDepositsOwed - totalDepositsPaid;
+
+ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, padding: "5px 7px", fontSize: 12, width: "100%" };
   const numInput = (i, key, val) => (
     <input type="number" value={val || ""} onChange={e => updShow(i, key, +e.target.value)} style={iS} placeholder="0" />
   );
@@ -1781,7 +1979,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
                 <div><Label>Venue</Label>
                   <input value={s.venue} onChange={e => updShow(activeCard,"venue",e.target.value)} style={iS} /></div>
                 <div><Label>Date</Label>
-                  <input type="date" value={s.date} onChange={e => updShow(activeCard,"date",e.target.value)} style={iS} /></div>
+                  <CalendarPicker value={s.date} onChange={v => updShow(activeCard,"date",v)} /></div>
                 <div><Label>Capacity</Label>
                   <input type="number" value={s.cap} onChange={e => updShow(activeCard,"cap",+e.target.value)} style={iS} /></div>
               </div>
@@ -1804,6 +2002,73 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
                 <div style={{ fontSize: 12, color: C.muted }}>Forecast Net: <strong style={{color:C.yellow}}>{fmt(c.forecastRev)}</strong></div>
                 <div style={{ fontSize: 12, color: C.muted }}>Sell-Out Net: <strong style={{color:C.green}}>{fmt(c.sellOutRev)}</strong></div>
               </div>
+            </Section>
+
+            {/* VIP REVENUE */}
+            <Section title="⭐ VIP Revenue (this show)">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                <div>
+                  <Label>VIP Packages Sold</Label>
+                  <input type="number" value={s.vipSold || ""} onChange={e=>updShow(activeCard,"vipSold",+e.target.value)} style={iS} placeholder="0" />
+                </div>
+                <div>
+                  <Label>VIP Package Price (AUD)</Label>
+                  <input type="number" value={s.catBPrice || ""} onChange={e=>updShow(activeCard,"catBPrice",+e.target.value)} style={iS} placeholder="0" />
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <input type="checkbox" checked={s.vipIncludesTicket} onChange={e=>updShow(activeCard,"vipIncludesTicket",e.target.checked)} style={{ accentColor: C.accent }} />
+                <span style={{ fontSize: 12, color: C.muted }}>VIP includes a general admission ticket</span>
+              </div>
+              {(s.vipSold > 0 && s.catBPrice > 0) && (() => {
+                const sold = +s.vipSold || 0;
+                const price = +s.catBPrice || 0;
+                const gross = sold * price;
+                // If includes ticket, the VIP component = price - ticket price (cat A)
+                const ticketComponent = s.vipIncludesTicket ? (+s.catAPrice || 0) : 0;
+                const vipComponent = price - ticketComponent;
+                const grossVipComp = sold * vipComponent;
+                // Deductions per ticket: GST (1/11 of vipComponent) + booking fee capped $9
+                const gstPerTix = vipComponent / 11;
+                const bookingFeePerTix = Math.min(9, vipComponent * 0.1);
+                const deductionsPerTix = gstPerTix + bookingFeePerTix;
+                const netVipComp = sold * (vipComponent - deductionsPerTix);
+                // Package costs
+                const totalPkgCost = sold * vipTotalCostPerPkg;
+                const netAfterCosts = netVipComp - totalPkgCost;
+                const artistShare = netAfterCosts * 0.70;
+                const myShare = netAfterCosts * 0.30;
+                return (
+                  <div style={{ background: C.bg, borderRadius: 8, padding: "12px 14px", fontSize: 12 }}>
+                    <div style={{ fontWeight: 700, color: C.accent, marginBottom: 8, fontSize: 11, textTransform: "uppercase", letterSpacing: 1 }}>VIP Revenue Breakdown</div>
+                    {[
+                      ["Gross VIP Revenue", fmt(gross), C.text],
+                      [s.vipIncludesTicket ? "Less ticket component" : "No ticket component", s.vipIncludesTicket ? `−${fmt(sold*ticketComponent)}` : "—", C.muted],
+                      ["Gross VIP Component", fmt(grossVipComp), C.yellow],
+                      [`GST (1/11 of VIP) ×${sold}`, `−${fmt(sold*gstPerTix)}`, C.muted],
+                      [`Booking/ticketing fee (max $9) ×${sold}`, `−${fmt(sold*bookingFeePerTix)}`, C.muted],
+                      ["Net VIP Component", fmt(netVipComp), C.yellow],
+                      [`Package costs (${sold} × ${fmt(vipTotalCostPerPkg)})`, `−${fmt(totalPkgCost)}`, C.muted],
+                      ["Net after package costs", fmt(netAfterCosts), netAfterCosts>=0?C.green:C.red],
+                    ].map(([l,v,col])=>(
+                      <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0", borderBottom:`1px solid ${C.border}` }}>
+                        <span style={{ color:C.muted }}>{l}</span>
+                        <span style={{ color:col, fontWeight:600 }}>{v}</span>
+                      </div>
+                    ))}
+                    <div style={{ marginTop: 8, display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                      <div style={{ background:C.panel, borderRadius:6, padding:"8px 10px", textAlign:"center" }}>
+                        <div style={{ fontSize:10, color:C.muted, marginBottom:3 }}>ARTIST (70%)</div>
+                        <div style={{ fontSize:16, fontWeight:800, color:artistShare>=0?C.green:C.red }}>{fmt(artistShare)}</div>
+                      </div>
+                      <div style={{ background:C.panel, borderRadius:6, padding:"8px 10px", textAlign:"center" }}>
+                        <div style={{ fontSize:10, color:C.muted, marginBottom:3 }}>YOU (30%)</div>
+                        <div style={{ fontSize:16, fontWeight:800, color:myShare>=0?C.green:C.red }}>{fmt(myShare)}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </Section>
 
             <Section title="🏟️ Venue Hire">
@@ -1913,6 +2178,158 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
         <Stat label="Tour P&L (Forecast)" value={fmt(totals.plForecast)} color={totals.plForecast>=0?C.green:C.red} />
         <Stat label="Tour P&L (Sell-Out)" value={fmt(totals.plSellOut)} color={totals.plSellOut>=0?C.green:C.red} />
       </div>
+
+      {/* VIP PACKAGE COSTS */}
+      <Section title="⭐ VIP Package Costs — National">
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+          <div style={{ fontSize:12, color:C.muted }}>Enter the cost of each item per VIP package. A 10% prep/fulfilment fee is automatically added.</div>
+          <button onClick={()=>setVipShowItems(o=>!o)}
+            style={{ background:vipShowItems?C.panel:C.accent, border:"none", borderRadius:6, color:vipShowItems?C.muted:"#fff", padding:"6px 14px", cursor:"pointer", fontSize:12, fontWeight:700 }}>
+            {vipShowItems?"Hide Items":"Edit Items"}
+          </button>
+        </div>
+        {vipShowItems && (
+          <div style={{ marginBottom:12 }}>
+            {vipItems.map((item, idx) => (
+              <div key={idx} style={{ display:"grid", gridTemplateColumns:"180px 1fr 32px", gap:8, alignItems:"center", marginBottom:6 }}>
+                <select value={item.label} onChange={e=>setVipItems(v=>v.map((x,i)=>i===idx?{...x,label:e.target.value}:x))}
+                  style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"5px 8px", fontSize:12 }}>
+                  {["Poster","Laminate","Lanyard","Other"].map(l=><option key={l}>{l}</option>)}
+                </select>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:12, color:C.muted }}>$</span>
+                  <input type="number" value={item.cost||""} placeholder="0"
+                    onChange={e=>setVipItems(v=>v.map((x,i)=>i===idx?{...x,cost:+e.target.value}:x))}
+                    style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"5px 8px", fontSize:12, width:"100%" }} />
+                </div>
+                <button onClick={()=>setVipItems(v=>v.filter((_,i)=>i!==idx))}
+                  style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:16, padding:0 }}>×</button>
+              </div>
+            ))}
+            {vipItems.length < 4 && (
+              <button onClick={()=>setVipItems(v=>[...v,{label:"Other",cost:0}])}
+                style={{ background:C.panel, border:`1px dashed ${C.border}`, borderRadius:6, color:C.muted, padding:"5px 14px", cursor:"pointer", fontSize:12, marginTop:4 }}>
+                + Add item
+              </button>
+            )}
+          </div>
+        )}
+        <div style={{ background:C.bg, borderRadius:8, padding:"12px 14px", display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+          <div>
+            <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:3 }}>Items Total</div>
+            <div style={{ fontSize:16, fontWeight:700, color:C.text }}>{fmt(vipRawCost)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:3 }}>Prep Fee (10%)</div>
+            <div style={{ fontSize:16, fontWeight:700, color:C.yellow }}>{fmt(vipPrepFee)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:3 }}>Cost Per Package</div>
+            <div style={{ fontSize:16, fontWeight:700, color:C.accent }}>{fmt(vipTotalCostPerPkg)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:3 }}>Split after deductions</div>
+            <div style={{ fontSize:12, color:C.muted }}>Artist 70% / You 30%</div>
+            <div style={{ fontSize:10, color:C.muted, fontStyle:"italic", marginTop:2 }}>GST + booking fees (≤$9/tix) deducted first</div>
+          </div>
+        </div>
+        <div style={{ fontSize:11, color:C.muted, marginTop:8, fontStyle:"italic" }}>
+          Per-show VIP revenue split is calculated in the Card View → select a show and enter VIP packages sold + package price.
+        </div>
+      </Section>
+
+      {/* DEPOSIT TRACKER */}
+      <Section title="💰 Deposit Tracker — Payments to Artist / Agent">
+        {deposits.length > 0 && (
+          <div style={{ marginBottom:12 }}>
+            {/* Summary row */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:12 }}>
+              <div style={{ background:C.bg, borderRadius:8, padding:"10px 12px" }}>
+                <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:2 }}>Total Owed</div>
+                <div style={{ fontSize:18, fontWeight:800, color:C.text }}>{fmt(totalDepositsOwed)}</div>
+              </div>
+              <div style={{ background:C.bg, borderRadius:8, padding:"10px 12px" }}>
+                <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:2 }}>Paid</div>
+                <div style={{ fontSize:18, fontWeight:800, color:C.green }}>{fmt(totalDepositsPaid)}</div>
+              </div>
+              <div style={{ background:C.bg, borderRadius:8, padding:"10px 12px", border:`1px solid ${depositBalance > 0 ? C.red : C.green}` }}>
+                <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:2 }}>Balance Due</div>
+                <div style={{ fontSize:18, fontWeight:800, color:depositBalance>0?C.red:C.green }}>{fmt(depositBalance)}</div>
+              </div>
+            </div>
+            {/* Deposit rows */}
+            <div style={{ background:C.panel, borderRadius:8, border:`1px solid ${C.border}`, overflow:"hidden", marginBottom:10 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 90px 110px 110px 80px 30px", gap:6, padding:"7px 10px", background:C.card, fontSize:10, fontWeight:700, color:C.textDim, textTransform:"uppercase" }}>
+                <span>Description</span><span>Amount</span><span>Due Date</span><span>Paid Date</span><span>Status</span><span></span>
+              </div>
+              {deposits.map(dep => (
+                <div key={dep.id} style={{ display:"grid", gridTemplateColumns:"1fr 90px 110px 110px 80px 30px", gap:6, padding:"7px 10px", borderTop:`1px solid ${C.border}`, alignItems:"center" }}>
+                  <input value={dep.description} onChange={e=>updDeposit(dep.id,"description",e.target.value)}
+                    style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:4, color:C.text, padding:"4px 7px", fontSize:12, width:"100%" }} />
+                  <div style={{ display:"flex", alignItems:"center", gap:3 }}>
+                    <span style={{ fontSize:11, color:C.muted }}>$</span>
+                    <input type="number" value={dep.amount||""} onChange={e=>updDeposit(dep.id,"amount",+e.target.value)}
+                      style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:4, color:C.text, padding:"4px 5px", fontSize:12, width:"100%" }} />
+                  </div>
+                  <CalendarPicker value={dep.dueDate} onChange={v=>updDeposit(dep.id,"dueDate",v)} />
+                  <CalendarPicker value={dep.paidDate} onChange={v=>updDeposit(dep.id,"paidDate",v)} />
+                  <button onClick={()=>updDeposit(dep.id,"paid",!dep.paid)}
+                    style={{ padding:"4px 8px", borderRadius:5, border:"none", cursor:"pointer", fontWeight:700, fontSize:11,
+                      background:dep.paid?"rgba(34,197,94,0.15)":"rgba(239,68,68,0.1)",
+                      color:dep.paid?C.green:C.red }}>
+                    {dep.paid?"✓ Paid":"Unpaid"}
+                  </button>
+                  <button onClick={()=>delDeposit(dep.id)} style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:16 }}>×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {showAddDeposit ? (
+          <div style={{ background:C.bg, borderRadius:8, padding:"14px 16px", border:`1px solid ${C.accent}`, marginBottom:10 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:C.accent, marginBottom:10 }}>NEW DEPOSIT / PAYMENT</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+              <div>
+                <Label>Description</Label>
+                <input value={newDeposit.description} onChange={e=>setNewDeposit(d=>({...d,description:e.target.value}))}
+                  style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"6px 8px", fontSize:13, width:"100%" }} />
+              </div>
+              <div>
+                <Label>Amount ($AUD)</Label>
+                <input type="number" value={newDeposit.amount||""} placeholder="0" onChange={e=>setNewDeposit(d=>({...d,amount:+e.target.value}))}
+                  style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"6px 8px", fontSize:13, width:"100%" }} />
+              </div>
+              <div>
+                <Label>Due Date</Label>
+                <CalendarPicker value={newDeposit.dueDate} onChange={v=>setNewDeposit(d=>({...d,dueDate:v}))} />
+              </div>
+              <div>
+                <Label>Notes (optional)</Label>
+                <input value={newDeposit.notes} onChange={e=>setNewDeposit(d=>({...d,notes:e.target.value}))}
+                  style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"6px 8px", fontSize:13, width:"100%" }} placeholder="e.g. 50% on signing" />
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={addDeposit}
+                style={{ flex:1, background:C.green, border:"none", borderRadius:6, color:"#fff", padding:"8px", cursor:"pointer", fontWeight:700, fontSize:13 }}>
+                Add Deposit
+              </button>
+              <button onClick={()=>setShowAddDeposit(false)}
+                style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, padding:"8px 14px", cursor:"pointer", fontSize:13 }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={()=>setShowAddDeposit(true)}
+            style={{ background:C.accent, border:"none", borderRadius:6, color:"#fff", padding:"8px 18px", cursor:"pointer", fontWeight:700, fontSize:13 }}>
+            + Add Deposit / Payment
+          </button>
+        )}
+        {deposits.length === 0 && !showAddDeposit && (
+          <div style={{ fontSize:12, color:C.muted, marginTop:8, fontStyle:"italic" }}>No deposits recorded yet. Add deposits, milestone payments, or any money owed to artist/agent.</div>
+        )}
+      </Section>
 
       {/* VIEW TOGGLE */}
       <div style={{ display:"flex", gap:8, marginBottom:16 }}>
@@ -2084,7 +2501,7 @@ function TicketingTab({ shows, artist }) {
             <Section title={`📍 ${r.city || `Show ${activeShow+1}`} — ${r.venue}`} accent>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
                 <div><Label>Show Date</Label>
-                  <input type="date" value={r.showDate} onChange={e => updRecord(activeShow, "showDate", e.target.value)} style={iS} />
+                  <CalendarPicker value={r.showDate} onChange={v => updRecord(activeShow, "showDate", v)} />
                 </div>
                 <div><Label>Ticket Price (AUD)</Label>
                   <input type="number" value={r.ticketPrice || ""} onChange={e => updRecord(activeShow, "ticketPrice", +e.target.value)} style={iS} placeholder="0" />
@@ -2209,14 +2626,14 @@ function TicketingTab({ shows, artist }) {
                 {newEntry.dateType === "single" ? (
                   <div style={{ marginBottom: 10 }}>
                     <Label>Date</Label>
-                    <input type="date" value={newEntry.date} onChange={e => setNewEntry(n => ({...n, date: e.target.value}))} style={iS} />
+                    <CalendarPicker value={newEntry.date} onChange={v => setNewEntry(n => ({...n, date: v}))} />
                   </div>
                 ) : (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
                     <div><Label>From</Label>
-                      <input type="date" value={newEntry.dateFrom} onChange={e => setNewEntry(n => ({...n, dateFrom: e.target.value}))} style={iS} /></div>
+                      <CalendarPicker value={newEntry.dateFrom} onChange={v => setNewEntry(n => ({...n, dateFrom: v}))} /></div>
                     <div><Label>To</Label>
-                      <input type="date" value={newEntry.dateTo} onChange={e => setNewEntry(n => ({...n, dateTo: e.target.value}))} style={iS} /></div>
+                      <CalendarPicker value={newEntry.dateTo} onChange={v => setNewEntry(n => ({...n, dateTo: v}))} /></div>
                   </div>
                 )}
 

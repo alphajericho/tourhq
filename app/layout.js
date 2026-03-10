@@ -1,6 +1,10 @@
 export const metadata = {
-  title: 'Tour HQ — Silverback Touring',
+  title: 'UDO — Silverback Touring',
   description: 'Tour budgeting, research and planning platform',
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 export default function RootLayout({ children }) {
