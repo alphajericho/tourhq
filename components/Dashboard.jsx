@@ -554,7 +554,9 @@ export default function App() {
       {/* HEADER */}
       <div style={{ background: C.panel, borderBottom: `2px solid ${C.accent}`, padding: "12px 24px", display: "flex", alignItems: "center", gap: 16 }}>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: C.accent, letterSpacing: -0.5 }}>UDO</div>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <img src="/udo-logo.png" alt="UDO" style={{ height: 36, width: "auto" }} />
+          </div>
           <div style={{ fontSize: 11, color: C.muted }}>Silverback / Tribute / Delta Bravo</div>
         </div>
 
@@ -1825,7 +1827,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
   const totalDepositsPaid = deposits.filter(d => d.paid).reduce((a, d) => a + (+d.amount || 0), 0);
   const depositBalance = totalDepositsOwed - totalDepositsPaid;
 
- background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, padding: "5px 7px", fontSize: 12, width: "100%" };
+  const iS = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, padding: "5px 7px", fontSize: 12, width: "100%" };
   const numInput = (i, key, val) => (
     <input type="number" value={val || ""} onChange={e => updShow(i, key, +e.target.value)} style={iS} placeholder="0" />
   );
