@@ -553,12 +553,9 @@ export default function App() {
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'Inter', system-ui, sans-serif", color: C.text }}>
       {/* HEADER */}
       <div style={{ background: C.panel, borderBottom: `2px solid ${C.accent}`, padding: "12px 24px", display: "flex", alignItems: "center", gap: 16 }}>
-        <div>
-          <div style={{ display: "flex", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center" }}>
             <img src="/udo-logo.png" alt="UDO" style={{ height: 36, width: "auto" }} />
           </div>
-          <div style={{ fontSize: 11, color: C.muted }}>Silverback / Tribute / Delta Bravo</div>
-        </div>
 
         {/* TOUR SELECTOR */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
