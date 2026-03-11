@@ -453,7 +453,7 @@ export default function App() {
     setTicketingRecords([blankTicketRecord()]);
     setShowData([blankSBShow()]);
     setVenues(VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i })));
-    setNational({ intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0 });
+    setNational({ intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0, artistFeeCurrency: 'USD' });
     setVipItems([{ label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 }]);
     setDeposits([]);
   };
@@ -471,7 +471,7 @@ export default function App() {
     setShowNameModal(false);
     // Create the tour record immediately so autosave has an ID to work with
     setSaving(true);
-    const payload = { artist: { name: "", agent: "", status: "IN CONSIDERATION", dealCurrency: "USD", dealAmt: 0, dealType: "Flat Guarantee" }, shows: [defaultShow()], party: {}, fx, ticketTypes: [{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 }], vipPackageCost: { poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 }, ticketingRecords: [blankTicketRecord()], showData: [blankSBShow()], national: { intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0 }, vipItems: [{ label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 }], deposits: [], venues: VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i })) };
+    const payload = { artist: { name: "", agent: "", status: "IN CONSIDERATION", dealCurrency: "USD", dealAmt: 0, dealType: "Flat Guarantee" }, shows: [defaultShow()], party: {}, fx, ticketTypes: [{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 }], vipPackageCost: { poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 }, ticketingRecords: [blankTicketRecord()], showData: [blankSBShow()], national: { intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0, artistFeeCurrency: 'USD' }, vipItems: [{ label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 }], deposits: [], venues: VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i })) };
     try {
       const res = await fetch('/api/tours', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: pendingName.trim(), artist_name: "", status: "IN CONSIDERATION", payload }) });
@@ -544,7 +544,7 @@ export default function App() {
   });
   const [showData, setShowData] = useState(() => [blankSBShow()]);
   const [national, setNational] = useState({
-    intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0,
+    intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0, artistFeeCurrency: 'USD',
   });
   const [vipItems, setVipItems] = useState([
     { label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 },
@@ -992,7 +992,7 @@ export default function App() {
                   ["Production", totalProduction],
                   ["Marketing", totalMarketing],
                   ["Misc / Contingency", totalMisc],
-                  ["Artist Fee (AUD)", artistAUD],
+                  [`Artist Fee (${artist.dealCurrency} ${fmtN(artist.dealAmt)} = ${fmt(artistAUD)} AUD)`, artistAUD],
                 ].map(([label, val]) => (
                   <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}`, fontSize: 13 }}>
                     <span style={{ color: C.textDim }}>{label}</span>
@@ -2210,6 +2210,11 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
     return Object.values(latest.agents || {}).reduce((a, v) => a + (+v || 0), 0);
   };
 
+  // Convert artist fee to AUD for budget calculations
+  const artistFeeAUD = national.artistFeeCurrency === 'AUD'
+    ? national.artistFee
+    : (national.artistFee || 0) * (fx[national.artistFeeCurrency] || 1);
+
   const natPerShow = numShows > 0 ? {
     intlFlights: national.intlFlights / numShows,
     visas: national.visas / numShows,
@@ -2217,7 +2222,8 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
     passes: national.passes / numShows,
     marketing: national.marketing / numShows,
     contingency: national.contingency / numShows,
-    artistFee: national.artistFee / numShows,
+    artistFee: artistFeeAUD / numShows,
+    artistFeeAUD: artistFeeAUD,
   } : {};
 
   const showCalc = (s, i) => {
@@ -2384,7 +2390,10 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
 
         {/* NATIONAL ALLOCATED */}
         <HeaderRow label="🌐 National (Allocated per show)" />
-        <DataRow label="Artist Fee (share)" values={calcs.map(()=>natPerShow.artistFee||0)} total={national.artistFee} />
+        <DataRow
+          label={`Artist Fee (${national.artistFeeCurrency||"USD"} ${fmtN(national.artistFee||0)} = ${fmt(artistFeeAUD)} AUD — per show share)`}
+          values={calcs.map(()=>natPerShow.artistFee||0)}
+          total={artistFeeAUD} />
         <DataRow label="Marketing (share)" values={calcs.map(c=>c.mktg)} total={national.marketing} />
         <DataRow label="Contingency (share)" values={calcs.map(()=>natPerShow.contingency||0)} total={national.contingency} />
         <DataRow label="Passes (share)" values={calcs.map(()=>natPerShow.passes||0)} total={national.passes} />
@@ -2720,7 +2729,6 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
             ["Intl Flights (total)","intlFlights"],
             ["Visas & Permits","visas"],
             ["Insurance","insurance"],
-            ["Artist Fee (AUD)","artistFee"],
             ["Passes","passes"],
             ["Marketing (national)","marketing"],
             ["Contingency","contingency"],
@@ -2731,11 +2739,37 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                 style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", width:"100%", fontSize:13 }} placeholder="0" />
             </div>
           ))}
+          {/* Artist Fee — custom field with currency selector */}
+          <div style={{ gridColumn: "span 2" }}>
+            <Label>Artist Fee</Label>
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <select value={national.artistFeeCurrency||"AUD"} onChange={e=>setNational(n=>({...n,artistFeeCurrency:e.target.value}))}
+                style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.accent, padding:"7px 8px", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                {["AUD","USD","GBP","EUR"].map(cur=><option key={cur} value={cur}>{cur}</option>)}
+              </select>
+              <input type="number" value={national.artistFee||""} onChange={e=>setNational(n=>({...n,artistFee:+e.target.value}))}
+                style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", flex:1, fontSize:13 }} placeholder="0" />
+            </div>
+            {national.artistFeeCurrency && national.artistFeeCurrency !== "AUD" && national.artistFee > 0 && (
+              <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>
+                = {fmt(national.artistFee * (fx[national.artistFeeCurrency]||1))} AUD
+              </div>
+            )}
+            {national.artistFeeCurrency === "AUD" && national.artistFee > 0 && (
+              <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>
+                {["USD","GBP","EUR"].map(cur => (
+                  <span key={cur} style={{ marginRight:10 }}>
+                    {cur} {fmtN(national.artistFee / (fx[cur]||1))}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
           <div style={{ display:"flex", alignItems:"flex-end" }}>
             <div style={{ background:C.bg, borderRadius:6, padding:"8px 12px", width:"100%", border:`1px solid ${C.border}` }}>
-              <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:3 }}>Per Show Share</div>
+              <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:3 }}>Per Show Share (AUD)</div>
               <div style={{ fontSize:14, fontWeight:700, color:C.accent }}>
-                {fmt(Object.values(national).reduce((a,v)=>a+v,0) / Math.max(numShows,1))}
+                {fmt((national.intlFlights + national.visas + national.insurance + national.passes + national.marketing + national.contingency + artistFeeAUD) / Math.max(numShows,1))}
               </div>
             </div>
           </div>
