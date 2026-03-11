@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 
 // ─── COLOUR PALETTE ────────────────────────────────────────────────────────
 const C = {
@@ -385,7 +385,7 @@ export default function App() {
   const [showNameModal, setShowNameModal] = useState(false);
   const [pendingName, setPendingName] = useState("");
   const [autoSaveStatus, setAutoSaveStatus] = useState(""); // "saving" | "saved" | "error" | ""
-  const autoSaveTimer = React.useRef(null);
+  const autoSaveTimer = useRef(null);
 
   useEffect(() => { loadTourList(); }, []);
 
@@ -647,7 +647,7 @@ export default function App() {
   const [researchNote, setResearchNote] = useState("");
 
   // ── AUTOSAVE: fires 3s after any data change — placed after all state declarations ──
-  const autoSave = React.useCallback(async () => {
+  const autoSave = useCallback(async () => {
     if (!activeTourId) return;
     setAutoSaveStatus("saving");
     const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues };
