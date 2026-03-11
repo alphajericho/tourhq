@@ -17,6 +17,7 @@ const C = {
   text: "#e5e7eb",
   textDim: "#9ca3af",
 };
+const COLORS = C; // alias so components can do: const C = COLORS
 
 // ─── VENUE DATABASE ────────────────────────────────────────────────────────
 const VENUE_DB = [
