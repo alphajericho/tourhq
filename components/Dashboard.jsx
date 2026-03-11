@@ -472,6 +472,13 @@ export default function App() {
   const removeShow = useCallback((i) => setShows(prev => prev.filter((_, j) => j !== i)), []);
   const addShow = () => setShows(prev => [...prev, defaultShow()]);
 
+  // ── TICKETING RECORDS (lifted from TicketingTab so ShowByShow can read live sales) ──
+  const blankTicketRecord = () => ({
+    city: "", venue: "", cap: 0, ticketPrice: 0, showDate: "",
+    selectedAgents: [], entries: [], vipLimit: 0, vipIncludesTicket: true,
+  });
+  const [ticketingRecords, setTicketingRecords] = useState([blankTicketRecord()]);
+
   // ── TOUR PARTY ──
   const [party, setParty] = useState({ band: 4, crew: 2, local: 3, intlFlightCost: 0, intlFlightPax: 0, domLegs: 0, domCostPerLeg: 350, domPax: 0, accomNights: 0, accomRooms: 0, accomRate: 180, sprinterLegs: 0, sprinterCost: 500, vanDays: 0, vans: 1, vanRate: 150, drivers: 0, driverDays: 0, driverRate: 350, perDiemPax: 0, pdRate: 75, pdShows: 0, catering: 0, cateringShows: 0, visaPax: 0, visaFee: 420, union: 150, tourMgrRate: 600, tourMgrDays: 0, stagehandShows: 0, stagehandRate: 440, supportStaff: 0, supportRate: 450, supports: 0, supportFee: 400, backlineShows: 0, backlineCost: 2200, lightingShows: 0, lightingRate: 550, marketing: 500, publicist: 1500, creative: 1000, contingency: 5000, passes: 350 });
   const p = party;
