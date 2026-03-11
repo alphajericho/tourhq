@@ -1893,6 +1893,15 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
                 <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>
                   {t.type === "VIPWT" ? `VIP gross: ${fmt(c.vipGross)}` : "what you keep per ticket"}
                 </div>
+                {(t.type === "VIPWT" || t.type === "VIPUG") && totalPkgCost > 0 && (
+                  <div style={{ marginTop:6 }}>
+                    <div style={{ fontSize:10, color:C.muted, marginBottom:2, textTransform:"uppercase" }}>Net after pkg cost</div>
+                    <div style={{ background:C.bg, border:`1px solid ${C.green}`, borderRadius:5, padding:"6px 8px", fontSize:15, fontWeight:800, color:C.green }}>
+                      {fmt(c.netAfterPkg)}
+                    </div>
+                    <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>less {fmt(totalPkgCost)} pkg</div>
+                  </div>
+                )}
               </div>
               <div>
                 <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Allocation</div>
