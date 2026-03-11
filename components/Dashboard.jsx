@@ -387,8 +387,6 @@ export default function App() {
   const [autoSaveStatus, setAutoSaveStatus] = useState(""); // "saving" | "saved" | "error" | ""
   const autoSaveTimer = useRef(null);
 
-  useEffect(() => { loadTourList(); }, []);
-
   const loadTourList = async () => {
     try {
       const res = await fetch('/api/tours');
@@ -396,6 +394,8 @@ export default function App() {
       if (t) setTours(t);
     } catch (e) {}
   };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadTourList(); }, []);
 
   const loadTour = async (id) => {
     try {
@@ -529,29 +529,6 @@ export default function App() {
   });
   const [ticketingRecords, setTicketingRecords] = useState(() => [blankTicketRecord()]);
 
-  // Keep ticketingRecords in sync with showData (Show by Show is the source of truth)
-  // Falls back to estimator shows if showData is empty
-  useEffect(() => {
-    const source = showData.length > 0 ? showData : shows;
-    setTicketingRecords(prev => {
-      return source.map((s, i) => {
-        const existing = prev[i] || {};
-        return {
-          city: s.city || "",
-          venue: s.venue || s.venueName || "",
-          cap: s.cap || 0,
-          ticketPrice: s.catAPrice || s.ticketPrice || 0,
-          showDate: s.date || existing.showDate || "",
-          selectedAgents: existing.selectedAgents || [],
-          entries: existing.entries || [],
-          vipLimit: existing.vipLimit || 0,
-          vipIncludesTicket: existing.vipIncludesTicket !== undefined ? existing.vipIncludesTicket : true,
-        };
-      });
-    });
-  }, [JSON.stringify(showData.map(s => ({ city: s.city, venue: s.venue, cap: s.cap, catAPrice: s.catAPrice, date: s.date }))),
-     JSON.stringify(shows.map(s => ({ city: s.city, venue: s.venueName, cap: s.cap, ticketPrice: s.ticketPrice })))]);
-
   // ── SHOW BY SHOW DATA (lifted so it persists via save/load) ──
   const blankSBShow = (s) => ({
     city: s?.city || "", venue: s?.venueName || s?.venue || "", cap: s?.cap || 0, date: s?.date || "",
@@ -578,6 +555,30 @@ export default function App() {
   const [venues, setVenues] = useState(() =>
     VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i }))
   );
+
+  // Keep ticketingRecords in sync with showData (Show by Show is the source of truth)
+  // Falls back to estimator shows if showData is empty
+  // Placed here so all dependencies (showData, shows) are already declared above
+  useEffect(() => {
+    const source = showData.length > 0 ? showData : shows;
+    setTicketingRecords(prev => {
+      return source.map((s, i) => {
+        const existing = prev[i] || {};
+        return {
+          city: s.city || "",
+          venue: s.venue || s.venueName || "",
+          cap: s.cap || 0,
+          ticketPrice: s.catAPrice || s.ticketPrice || 0,
+          showDate: s.date || existing.showDate || "",
+          selectedAgents: existing.selectedAgents || [],
+          entries: existing.entries || [],
+          vipLimit: existing.vipLimit || 0,
+          vipIncludesTicket: existing.vipIncludesTicket !== undefined ? existing.vipIncludesTicket : true,
+        };
+      });
+    });
+  }, [JSON.stringify(showData.map(s => ({ city: s.city, venue: s.venue, cap: s.cap, catAPrice: s.catAPrice, date: s.date }))),
+     JSON.stringify(shows.map(s => ({ city: s.city, venue: s.venueName, cap: s.cap, ticketPrice: s.ticketPrice })))]);
 
   // ── TICKET SCALING (defined once per tour, propagates to all tabs) ──
   const defaultTicketTypes = () => [
