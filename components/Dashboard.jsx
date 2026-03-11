@@ -1011,14 +1011,14 @@ export default function App() {
       {/* ── SHOW BY SHOW TAB ── */}
       {tab === "showbyshow" && (
         <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
-          <ShowByShowTab shows={shows} artist={artist} fx={fx} artistAUD={artistAUD} />
+          <ShowByShowTab shows={shows} artist={artist} fx={fx} artistAUD={artistAUD} ticketingRecords={ticketingRecords} setTicketingRecords={setTicketingRecords} />
         </div>
       )}
 
       {/* ── TICKETING TAB ── */}
       {tab === "ticketing" && (
         <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
-          <TicketingTab shows={shows} artist={artist} />
+          <TicketingTab shows={shows} artist={artist} ticketingRecords={ticketingRecords} setTicketingRecords={setTicketingRecords} />
         </div>
       )}
 
@@ -1676,8 +1676,22 @@ function ResearchTab() {
 }
 
 // ─── SHOW BY SHOW TAB ─────────────────────────────────────────────────────
-function ShowByShowTab({ shows, artist, fx, artistAUD }) {
-  const numShows = shows.length;
+function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTicketingRecords }) {
+
+  // ── ADD/REMOVE SHOWS DIRECTLY ──
+  const blankDirectShow = () => ({
+    city: "", venue: "", cap: 0, date: "",
+    catAPrice: 0, catACap: 0, catAForecast: 0.6,
+    catBPrice: 0, catBCap: 0, catBForecast: 0.6,
+    venueFlat: 0, venuePerHead: 5.5, apra: 0,
+    domFlights: 0, accom: 0, transfers: 0, vanHire: 0, drivers: 0,
+    advancingProd: 0, prodMgr: 0, tourMgr: 0, tourMgrOffDays: 0,
+    opsMgr: 0, stagehands: 0, runners: 0, tourStaff: 0,
+    perDiems: 0, catering: 0, supports: 0, backline: 0,
+    lightingTechs: 0, miscTechs: 0, prodAddOns: 0, marketing: 0,
+    notes: "", vipSold: 0, vipIncludesTicket: true,
+    soldOverride: null, // null = use ticket counts tab, number = manual override
+  });
 
   // ── NATIONAL COSTS (enter once, split across shows) ──
   const [national, setNational] = useState({
@@ -1759,8 +1773,35 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
   const [view, setView] = useState("table"); // "table" | "card"
   const [activeCard, setActiveCard] = useState(0);
 
+  const numShows = showData.length;
+
   const updShow = (i, key, val) =>
     setShowData(prev => prev.map((s, j) => j === i ? { ...s, [key]: val } : s));
+
+  const addDirectShow = () => {
+    setShowData(prev => [...prev, blankDirectShow()]);
+    setTicketingRecords(prev => [...prev, {
+      city: "", venue: "", cap: 0, ticketPrice: 0, showDate: "",
+      selectedAgents: [], entries: [], vipLimit: 0, vipIncludesTicket: true,
+    }]);
+    setActiveCard(showData.length);
+    setView("card");
+  };
+
+  const removeShow = (i) => {
+    if (!window.confirm("Remove this show?")) return;
+    setShowData(prev => prev.filter((_, j) => j !== i));
+    setTicketingRecords(prev => prev.filter((_, j) => j !== i));
+    setActiveCard(prev => Math.max(0, prev > i ? prev - 1 : prev));
+  };
+
+  // Get live ticket sales from Ticket Counts tab for a show index
+  const getLiveSold = (i) => {
+    const rec = ticketingRecords?.[i];
+    if (!rec || !rec.entries.length) return 0;
+    const latest = rec.entries[rec.entries.length - 1];
+    return Object.values(latest.agents || {}).reduce((a, v) => a + (+v || 0), 0);
+  };
 
   const natPerShow = numShows > 0 ? {
     intlFlights: national.intlFlights / numShows,
@@ -2013,16 +2054,24 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
 
             <Section title="🎫 Ticket Scaling">
               <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, marginBottom: 8 }}>CATEGORY A</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 4 }}>
                 <div><Label>Gross Price</Label><input type="number" value={s.catAPrice} onChange={e=>updShow(activeCard,"catAPrice",+e.target.value)} style={iS} /></div>
                 <div><Label>Allocation</Label><input type="number" value={s.catACap} onChange={e=>updShow(activeCard,"catACap",+e.target.value)} style={iS} /></div>
-                <div><Label>Forecast %</Label><input type="number" value={Math.round(s.catAForecast*100)} onChange={e=>updShow(activeCard,"catAForecast",(+e.target.value)/100)} style={iS} /></div>
+                <div>
+                  <Label>Forecast %</Label>
+                  <input type="number" value={Math.round(s.catAForecast*100)} onChange={e=>updShow(activeCard,"catAForecast",(+e.target.value)/100)} style={iS} />
+                  {s.catACap > 0 && <div style={{ fontSize:10, color:C.yellow, marginTop:2 }}>= {Math.round(s.catACap * s.catAForecast).toLocaleString()} tickets</div>}
+                </div>
               </div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, marginBottom: 8 }}>CATEGORY B (VIP / Premium)</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, marginBottom: 8, marginTop: 8 }}>CATEGORY B (VIP / Premium)</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                 <div><Label>Gross Price</Label><input type="number" value={s.catBPrice} onChange={e=>updShow(activeCard,"catBPrice",+e.target.value)} style={iS} /></div>
                 <div><Label>Allocation</Label><input type="number" value={s.catBCap} onChange={e=>updShow(activeCard,"catBCap",+e.target.value)} style={iS} /></div>
-                <div><Label>Forecast %</Label><input type="number" value={Math.round(s.catBForecast*100)} onChange={e=>updShow(activeCard,"catBForecast",(+e.target.value)/100)} style={iS} /></div>
+                <div>
+                  <Label>Forecast %</Label>
+                  <input type="number" value={Math.round(s.catBForecast*100)} onChange={e=>updShow(activeCard,"catBForecast",(+e.target.value)/100)} style={iS} />
+                  {s.catBCap > 0 && <div style={{ fontSize:10, color:C.yellow, marginTop:2 }}>= {Math.round(s.catBCap * s.catBForecast).toLocaleString()} tickets</div>}
+                </div>
               </div>
               <div style={{ marginTop: 10, background: C.bg, borderRadius: 6, padding: "10px 12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <div style={{ fontSize: 12, color: C.muted }}>Forecast Net: <strong style={{color:C.yellow}}>{fmt(c.forecastRev)}</strong></div>
@@ -2135,6 +2184,63 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
               <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Production total: <strong style={{color:C.text}}>{fmt(c.production)}</strong></div>
             </Section>
 
+            {/* LIVE TICKET SALES PANEL */}
+            {(() => {
+              const liveSold = s.soldOverride !== null && s.soldOverride !== undefined
+                ? +s.soldOverride
+                : getLiveSold(activeCard);
+              const forecastTarget = Math.round((s.catACap * s.catAForecast) + (s.catBCap * s.catBForecast));
+              const netPerTix = Math.max(0, s.catAPrice - 7.95);
+              const breakeven = netPerTix > 0 ? Math.ceil(c.totalCosts / netPerTix) : 0;
+              const soldPct = s.cap > 0 ? (liveSold / s.cap * 100) : 0;
+              const toForecast = forecastTarget - liveSold;
+              const toBreakeven = breakeven - liveSold;
+              return (
+                <div style={{ background: C.panel, borderRadius: 10, padding: "16px", border: `1px solid ${C.border}`, marginBottom: 16 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>🎫 Live Ticket Sales</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ fontSize:10, color:C.muted }}>Override:</span>
+                      <input type="number" value={s.soldOverride ?? ""} placeholder="auto"
+                        onChange={e => updShow(activeCard, "soldOverride", e.target.value === "" ? null : +e.target.value)}
+                        style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:4, color:C.text, padding:"3px 6px", fontSize:11, width:70 }} />
+                    </div>
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
+                    <div style={{ background:C.bg, borderRadius:8, padding:"10px 12px", textAlign:"center" }}>
+                      <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:3 }}>Sold</div>
+                      <div style={{ fontSize:22, fontWeight:900, color:C.accent }}>{liveSold.toLocaleString()}</div>
+                      <div style={{ fontSize:10, color:C.muted }}>{soldPct.toFixed(1)}% of cap</div>
+                    </div>
+                    <div style={{ background:C.bg, borderRadius:8, padding:"10px 12px", textAlign:"center" }}>
+                      <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:3 }}>Forecast Target</div>
+                      <div style={{ fontSize:22, fontWeight:900, color:C.yellow }}>{forecastTarget.toLocaleString()}</div>
+                      <div style={{ fontSize:10, color: toForecast > 0 ? C.red : C.green }}>{toForecast > 0 ? `${toForecast.toLocaleString()} to go` : "✓ Hit"}</div>
+                    </div>
+                    <div style={{ background:C.bg, borderRadius:8, padding:"10px 12px", textAlign:"center" }}>
+                      <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:3 }}>Breakeven</div>
+                      <div style={{ fontSize:22, fontWeight:900, color:C.blue }}>{breakeven > 0 ? breakeven.toLocaleString() : "—"}</div>
+                      <div style={{ fontSize:10, color: toBreakeven > 0 ? C.red : C.green }}>{breakeven > 0 ? (toBreakeven > 0 ? `${toBreakeven.toLocaleString()} to go` : "✓ Covered") : ""}</div>
+                    </div>
+                  </div>
+                  <div style={{ height:6, background:C.bg, borderRadius:3, overflow:"hidden" }}>
+                    <div style={{ height:6, borderRadius:3, width:`${Math.min(soldPct,100)}%`,
+                      background: soldPct >= (breakeven/s.cap*100) ? C.green : soldPct >= (forecastTarget/s.cap*50) ? C.yellow : C.accent,
+                      transition:"width 0.3s" }} />
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:C.muted, marginTop:4 }}>
+                    <span>0</span>
+                    {forecastTarget > 0 && <span style={{color:C.yellow}}>▲ {forecastTarget.toLocaleString()}</span>}
+                    {breakeven > 0 && <span style={{color:C.blue}}>● {breakeven.toLocaleString()}</span>}
+                    <span>{s.cap.toLocaleString()}</span>
+                  </div>
+                  {s.soldOverride === null || s.soldOverride === undefined
+                    ? <div style={{ fontSize:10, color:C.muted, marginTop:6, fontStyle:"italic" }}>Auto-pulling from Ticket Counts tab</div>
+                    : <div style={{ fontSize:10, color:C.yellow, marginTop:6, fontStyle:"italic" }}>⚠ Manual override active — clear to use Ticket Counts</div>}
+                </div>
+              );
+            })()}
+
             {/* P&L CARD */}
             <div style={{ background: C.panel, borderRadius: 10, padding: "16px", border: `2px solid ${c.plForecast >= 0 ? C.green : C.red}` }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: C.textDim, textTransform: "uppercase", marginBottom: 12 }}>Show P&L</div>
@@ -2167,6 +2273,17 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
 
   return (
     <div>
+      {/* SHOW MANAGEMENT HEADER */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+        <div style={{ fontSize:13, color:C.muted }}>
+          {numShows} show{numShows !== 1 ? "s" : ""} — {numShows > 0 ? "edit in Card View or Table View below" : "Add your first show to get started"}
+        </div>
+        <button onClick={addDirectShow}
+          style={{ background:C.accent, border:"none", borderRadius:8, color:"#fff", padding:"9px 20px", cursor:"pointer", fontWeight:700, fontSize:13 }}>
+          + Add Show
+        </button>
+      </div>
+
       {/* NATIONAL COSTS PANEL */}
       <Section title="🌐 National Costs — Enter Once, Allocated Across All Shows" accent>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 10 }}>
@@ -2379,7 +2496,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
 // ─── TICKETING TAB ────────────────────────────────────────────────────────
 const AGENTS = ["Oztix", "Moshtix", "Ticketek", "Ticketmaster", "Silverback", "Other"];
 
-function TicketingTab({ shows, artist }) {
+function TicketingTab({ shows, artist, ticketingRecords, setTicketingRecords }) {
 
   // Each show gets a ticketing record
   const blankRecord = (s) => ({
@@ -2394,7 +2511,9 @@ function TicketingTab({ shows, artist }) {
     vipIncludesTicket: true,
   });
 
-  const [records, setRecords] = useState(() => shows.map(s => blankRecord(s)));
+  // Use lifted state from App; sync if shows length changes
+  const records = ticketingRecords;
+  const setRecords = setTicketingRecords;
   const [activeShow, setActiveShow] = useState(0);
   const [view, setView] = useState("entry"); // "entry" | "snapshot"
   const [showAddEntry, setShowAddEntry] = useState(false);
