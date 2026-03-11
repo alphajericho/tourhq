@@ -1973,14 +1973,41 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
           <div>
             <Section title={`📍 Show ${activeCard + 1} — ${s.city || "Unnamed"}`} accent>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div><Label>City</Label>
-                  <input value={s.city} onChange={e => updShow(activeCard,"city",e.target.value)} style={iS} /></div>
-                <div><Label>Venue</Label>
-                  <input value={s.venue} onChange={e => updShow(activeCard,"venue",e.target.value)} style={iS} /></div>
+                <div>
+                  <Label>City</Label>
+                  <select value={s.city} onChange={e => updShow(activeCard, "city", e.target.value)}
+                    style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"6px 8px", fontSize:13, width:"100%" }}>
+                    <option value="">— Select city —</option>
+                    {[...new Set(VENUE_DB.map(v => v.city))].sort().map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label>Venue</Label>
+                  <select value={s.venue}
+                    onChange={e => {
+                      const venueName = e.target.value;
+                      const match = VENUE_DB.find(v => v.name === venueName && (!s.city || v.city === s.city));
+                      updShow(activeCard, "venue", venueName);
+                      if (match) updShow(activeCard, "cap", match.cap);
+                    }}
+                    style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"6px 8px", fontSize:13, width:"100%" }}>
+                    <option value="">— Select venue —</option>
+                    {VENUE_DB.filter(v => !s.city || v.city === s.city).map(v => (
+                      <option key={v.name} value={v.name}>{v.name}</option>
+                    ))}
+                  </select>
+                </div>
                 <div><Label>Date</Label>
                   <CalendarPicker value={s.date} onChange={v => updShow(activeCard,"date",v)} /></div>
-                <div><Label>Capacity</Label>
-                  <input type="number" value={s.cap} onChange={e => updShow(activeCard,"cap",+e.target.value)} style={iS} /></div>
+                <div>
+                  <Label>Capacity</Label>
+                  <input type="number" value={s.cap} onChange={e => updShow(activeCard,"cap",+e.target.value)} style={iS} />
+                  {s.venue && VENUE_DB.find(v => v.name === s.venue) && (
+                    <div style={{ fontSize:10, color:C.muted, marginTop:2, fontStyle:"italic" }}>Auto-filled from venue database</div>
+                  )}
+                </div>
               </div>
             </Section>
 
