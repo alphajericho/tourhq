@@ -1202,6 +1202,7 @@ export default function App() {
             national={national} setNational={setNational}
             vipItems={vipItems} setVipItems={setVipItems}
             deposits={deposits} setDeposits={setDeposits}
+            blankSBShow={blankSBShow}
           />
         </div>
       )}
@@ -2146,7 +2147,7 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
 }
 
 // ─── SHOW BY SHOW TAB ─────────────────────────────────────────────────────
-function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTicketingRecords, ticketTypes, vipPackageCost, showData, setShowData, national, setNational, vipItems, setVipItems, deposits, setDeposits }) {
+function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTicketingRecords, ticketTypes, vipPackageCost, showData, setShowData, national, setNational, vipItems, setVipItems, deposits, setDeposits, blankSBShow }) {
 
   // ── ADD/REMOVE SHOWS DIRECTLY — uses blankSBShow() from App level ──
 
