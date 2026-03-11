@@ -382,6 +382,10 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const [showTourPanel, setShowTourPanel] = useState(false);
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [pendingName, setPendingName] = useState("");
+  const [autoSaveStatus, setAutoSaveStatus] = useState(""); // "saving" | "saved" | "error" | ""
+  const autoSaveTimer = React.useRef(null);
 
   useEffect(() => { loadTourList(); }, []);
 
@@ -408,6 +412,11 @@ export default function App() {
       if (p.ticketTypes) setTicketTypes(p.ticketTypes);
       if (p.vipPackageCost) setVipPackageCost(p.vipPackageCost);
       if (p.ticketingRecords) setTicketingRecords(p.ticketingRecords);
+      if (p.showData) setShowData(p.showData);
+      if (p.venues) setVenues(p.venues);
+      if (p.national) setNational(p.national);
+      if (p.vipItems) setVipItems(p.vipItems);
+      if (p.deposits) setDeposits(p.deposits);
       setShowTourPanel(false);
       setSaveMsg(`✅ Loaded: ${tour.name}`);
       setTimeout(() => setSaveMsg(""), 3000);
@@ -416,7 +425,7 @@ export default function App() {
 
   const saveTour = async () => {
     setSaving(true);
-    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords };
+    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues };
     try {
       if (activeTourId) {
         await fetch('/api/tours', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -434,13 +443,43 @@ export default function App() {
     setTimeout(() => setSaveMsg(""), 3000);
   };
 
-  const newTour = () => {
+  const resetTourData = () => {
     setActiveTourId(null);
-    setTourName("New Tour");
     setArtist({ name: "", agent: "", status: "IN CONSIDERATION", dealCurrency: "USD", dealAmt: 0, dealType: "Flat Guarantee" });
     setShows([defaultShow()]);
     setParty({ band: 4, crew: 2, local: 3, intlFlightCost: 0, intlFlightPax: 0, domLegs: 0, domCostPerLeg: 350, domPax: 0, accomNights: 0, accomRooms: 0, accomRate: 180, sprinterLegs: 0, sprinterCost: 500, vanDays: 0, vans: 1, vanRate: 150, drivers: 0, driverDays: 0, driverRate: 350, perDiemPax: 0, pdRate: 75, pdShows: 0, catering: 0, cateringShows: 0, visaPax: 0, visaFee: 420, union: 150, tourMgrRate: 600, tourMgrDays: 0, stagehandShows: 0, stagehandRate: 440, supportStaff: 0, supportRate: 450, supports: 0, supportFee: 400, backlineShows: 0, backlineCost: 2200, lightingShows: 0, lightingRate: 550, marketing: 500, publicist: 1500, creative: 1000, contingency: 5000, passes: 350 });
+    setTicketTypes([{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 }]);
+    setVipPackageCost({ poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 });
+    setTicketingRecords([blankTicketRecord()]);
+    setShowData([blankSBShow()]);
+    setVenues(VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i })));
+    setNational({ intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0 });
+    setVipItems([{ label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 }]);
+    setDeposits([]);
+  };
+
+  const newTour = () => {
+    setPendingName("");
+    setShowNameModal(true);
     setShowTourPanel(false);
+  };
+
+  const confirmNewTour = async () => {
+    if (!pendingName.trim()) return;
+    resetTourData();
+    setTourName(pendingName.trim());
+    setShowNameModal(false);
+    // Create the tour record immediately so autosave has an ID to work with
+    setSaving(true);
+    const payload = { artist: { name: "", agent: "", status: "IN CONSIDERATION", dealCurrency: "USD", dealAmt: 0, dealType: "Flat Guarantee" }, shows: [defaultShow()], party: {}, fx, ticketTypes: [{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 }], vipPackageCost: { poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 }, ticketingRecords: [blankTicketRecord()], showData: [blankSBShow()], national: { intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0 }, vipItems: [{ label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 }], deposits: [], venues: VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i })) };
+    try {
+      const res = await fetch('/api/tours', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: pendingName.trim(), artist_name: "", status: "IN CONSIDERATION", payload }) });
+      const { tour } = await res.json();
+      if (tour) setActiveTourId(tour.id);
+      loadTourList();
+    } catch (e) {}
+    setSaving(false);
   };
 
   const deleteTour = async (id) => {
@@ -490,19 +529,19 @@ export default function App() {
   });
   const [ticketingRecords, setTicketingRecords] = useState(() => [blankTicketRecord()]);
 
-  // Keep ticketingRecords in sync with shows — runs whenever shows change (length OR content)
+  // Keep ticketingRecords in sync with showData (Show by Show is the source of truth)
+  // Falls back to estimator shows if showData is empty
   useEffect(() => {
+    const source = showData.length > 0 ? showData : shows;
     setTicketingRecords(prev => {
-      return shows.map((s, i) => {
+      return source.map((s, i) => {
         const existing = prev[i] || {};
         return {
-          // Always overwrite show-sourced fields so edits propagate
           city: s.city || "",
-          venue: s.venueName || s.venue || "",
+          venue: s.venue || s.venueName || "",
           cap: s.cap || 0,
-          ticketPrice: s.ticketPrice || 0,
+          ticketPrice: s.catAPrice || s.ticketPrice || 0,
           showDate: s.date || existing.showDate || "",
-          // Preserve ticketing-only fields entered in Ticket Counts tab
           selectedAgents: existing.selectedAgents || [],
           entries: existing.entries || [],
           vipLimit: existing.vipLimit || 0,
@@ -510,7 +549,35 @@ export default function App() {
         };
       });
     });
-  }, [JSON.stringify(shows.map(s => ({ city: s.city, venue: s.venueName, cap: s.cap, ticketPrice: s.ticketPrice, date: s.date })))]);
+  }, [JSON.stringify(showData.map(s => ({ city: s.city, venue: s.venue, cap: s.cap, catAPrice: s.catAPrice, date: s.date }))),
+     JSON.stringify(shows.map(s => ({ city: s.city, venue: s.venueName, cap: s.cap, ticketPrice: s.ticketPrice })))]);
+
+  // ── SHOW BY SHOW DATA (lifted so it persists via save/load) ──
+  const blankSBShow = (s) => ({
+    city: s?.city || "", venue: s?.venueName || s?.venue || "", cap: s?.cap || 0, date: s?.date || "",
+    catAPrice: s?.ticketPrice || 0, catACap: s?.cap || 0, catAForecast: s?.attendPct || 0.6,
+    catBPrice: 0, catBCap: 0, catBForecast: 0.6,
+    venueFlat: s?.flatHire || 0, venuePerHead: 5.5, apra: 0,
+    domFlights: 0, accom: 0, transfers: 0, vanHire: 0, drivers: 0,
+    advancingProd: 0, prodMgr: 0, tourMgr: 0, tourMgrOffDays: 0,
+    opsMgr: 0, stagehands: 0, runners: 0, tourStaff: 0,
+    perDiems: 0, catering: 0, supports: 0, backline: 0,
+    lightingTechs: 0, miscTechs: 0, prodAddOns: 0, marketing: 0,
+    notes: "", vipSold: 0, vipIncludesTicket: true, soldOverride: null,
+  });
+  const [showData, setShowData] = useState(() => [blankSBShow()]);
+  const [national, setNational] = useState({
+    intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0,
+  });
+  const [vipItems, setVipItems] = useState([
+    { label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 },
+  ]);
+  const [deposits, setDeposits] = useState([]);
+
+  // ── VENUE DATA (lifted so custom venues persist) ──
+  const [venues, setVenues] = useState(() =>
+    VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i }))
+  );
 
   // ── TICKET SCALING (defined once per tour, propagates to all tabs) ──
   const defaultTicketTypes = () => [
@@ -578,6 +645,29 @@ export default function App() {
   const [offerTargetBE, setOfferTargetBE] = useState(60); // adjustable, default 60%
   const [researchOverseasGross, setResearchOverseasGross] = useState(0); // from research tab - what they earn per show overseas
   const [researchNote, setResearchNote] = useState("");
+
+  // ── AUTOSAVE: fires 3s after any data change — placed after all state declarations ──
+  const autoSave = React.useCallback(async () => {
+    if (!activeTourId) return;
+    setAutoSaveStatus("saving");
+    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues };
+    try {
+      await fetch('/api/tours', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: activeTourId, name: tourName, artist_name: artist.name, status: artist.status, payload }) });
+      setAutoSaveStatus("saved");
+      setTimeout(() => setAutoSaveStatus(""), 2000);
+    } catch (e) {
+      setAutoSaveStatus("error");
+      setTimeout(() => setAutoSaveStatus(""), 3000);
+    }
+  }, [activeTourId, tourName, artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues]);
+
+  useEffect(() => {
+    if (!activeTourId) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(autoSave, 3000);
+    return () => clearTimeout(autoSaveTimer.current);
+  }, [artist, shows, party, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues]);
   const revenueAtTargetBE = scenarioRevenue(offerTargetBE / 100);
   const maxOfferHeadroom = Math.max(0, revenueAtTargetBE - totalOpEx);
   const maxOfferHeadroomPerShow = numShows > 0 ? maxOfferHeadroom / numShows : 0;
@@ -598,6 +688,35 @@ export default function App() {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'Inter', system-ui, sans-serif", color: C.text }}>
+
+      {/* ── NAME MODAL ── */}
+      {showNameModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:C.panel, borderRadius:14, padding:32, width:420, border:`1px solid ${C.border}`, boxShadow:"0 20px 60px rgba(0,0,0,0.5)" }}>
+            <div style={{ fontSize:20, fontWeight:800, color:C.text, marginBottom:6 }}>Name your tour</div>
+            <div style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Give this tour a name before you start — it saves immediately so you never lose your work.</div>
+            <input
+              autoFocus
+              value={pendingName}
+              onChange={e => setPendingName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") confirmNewTour(); if (e.key === "Escape") setShowNameModal(false); }}
+              placeholder="e.g. Trixter Australia 2026"
+              style={{ width:"100%", background:C.bg, border:`2px solid ${C.accent}`, borderRadius:8, color:C.text, padding:"10px 12px", fontSize:16, marginBottom:16, boxSizing:"border-box" }}
+            />
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={confirmNewTour} disabled={!pendingName.trim()}
+                style={{ flex:1, background: pendingName.trim() ? C.accent : C.muted, border:"none", borderRadius:8, color:"#fff", padding:"10px", fontWeight:800, fontSize:14, cursor: pendingName.trim() ? "pointer" : "not-allowed" }}>
+                Create Tour &amp; Save
+              </button>
+              <button onClick={() => setShowNameModal(false)}
+                style={{ background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, color:C.muted, padding:"10px 16px", cursor:"pointer", fontSize:13 }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
       <div style={{ background: C.panel, borderBottom: `2px solid ${C.accent}`, padding: "12px 24px", display: "flex", alignItems: "center", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center" }}>
@@ -647,6 +766,9 @@ export default function App() {
             {saving ? "Saving…" : "💾 Save"}
           </button>
           {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith("✅") ? C.green : C.red }}>{saveMsg}</span>}
+          {!saveMsg && autoSaveStatus === "saving" && <span style={{ fontSize: 11, color: C.muted }}>⟳ Autosaving…</span>}
+          {!saveMsg && autoSaveStatus === "saved" && <span style={{ fontSize: 11, color: C.green }}>✓ Autosaved</span>}
+          {!saveMsg && autoSaveStatus === "error" && <span style={{ fontSize: 11, color: C.red }}>⚠ Autosave failed</span>}
         </div>
 
         {/* FX STRIP */}
@@ -1071,21 +1193,29 @@ export default function App() {
       {/* ── SHOW BY SHOW TAB ── */}
       {tab === "showbyshow" && (
         <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
-          <ShowByShowTab shows={shows} artist={artist} fx={fx} artistAUD={artistAUD} ticketingRecords={ticketingRecords} setTicketingRecords={setTicketingRecords} ticketTypes={ticketTypes} vipPackageCost={vipPackageCost} onShowDataChange={(sd) => setTicketingRecords(prev => prev.map((r, i) => sd[i] ? { ...r, city: sd[i].city || r.city, venue: sd[i].venue || r.venue, cap: sd[i].cap || r.cap, ticketPrice: sd[i].catAPrice || r.ticketPrice, showDate: sd[i].date || r.showDate } : r))} />
+          <ShowByShowTab
+            shows={shows} artist={artist} fx={fx} artistAUD={artistAUD}
+            ticketingRecords={ticketingRecords} setTicketingRecords={setTicketingRecords}
+            ticketTypes={ticketTypes} vipPackageCost={vipPackageCost}
+            showData={showData} setShowData={setShowData}
+            national={national} setNational={setNational}
+            vipItems={vipItems} setVipItems={setVipItems}
+            deposits={deposits} setDeposits={setDeposits}
+          />
         </div>
       )}
 
       {/* ── TICKETING TAB ── */}
       {tab === "ticketing" && (
         <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
-          <TicketingTab shows={shows} artist={artist} ticketingRecords={ticketingRecords} setTicketingRecords={setTicketingRecords} />
+          <TicketingTab shows={shows} showData={showData} artist={artist} ticketingRecords={ticketingRecords} setTicketingRecords={setTicketingRecords} />
         </div>
       )}
 
       {/* ── VENUE DATABASE TAB ── */}
       {tab === "venues" && (
         <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
-          <VenueTab />
+          <VenueTab venues={venues} setVenues={setVenues} />
         </div>
       )}
 
@@ -1240,11 +1370,9 @@ function VenueForm({ initial, onSave, onCancel, title }) {
 }
 
 // ─── VENUE DATABASE TAB ────────────────────────────────────────────────────
-function VenueTab() {
+function VenueTab({ venues, setVenues }) {
   const [filter, setFilter] = useState({ state: "ALL", search: "" });
-  const [venues, setVenues] = useState(() =>
-    VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i }))
-  );
+  // venues, setVenues now passed as props from App (persisted via save/load)
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
@@ -2017,87 +2145,23 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
 }
 
 // ─── SHOW BY SHOW TAB ─────────────────────────────────────────────────────
-function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTicketingRecords, ticketTypes, vipPackageCost, onShowDataChange }) {
+function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTicketingRecords, ticketTypes, vipPackageCost, showData, setShowData, national, setNational, vipItems, setVipItems, deposits, setDeposits }) {
 
-  // ── ADD/REMOVE SHOWS DIRECTLY ──
-  const blankDirectShow = () => ({
-    city: "", venue: "", cap: 0, date: "",
-    catAPrice: 0, catACap: 0, catAForecast: 0.6,
-    catBPrice: 0, catBCap: 0, catBForecast: 0.6,
-    venueFlat: 0, venuePerHead: 5.5, apra: 0,
-    domFlights: 0, accom: 0, transfers: 0, vanHire: 0, drivers: 0,
-    advancingProd: 0, prodMgr: 0, tourMgr: 0, tourMgrOffDays: 0,
-    opsMgr: 0, stagehands: 0, runners: 0, tourStaff: 0,
-    perDiems: 0, catering: 0, supports: 0, backline: 0,
-    lightingTechs: 0, miscTechs: 0, prodAddOns: 0, marketing: 0,
-    notes: "", vipSold: 0, vipIncludesTicket: true,
-    soldOverride: null, // null = use ticket counts tab, number = manual override
-  });
+  // ── ADD/REMOVE SHOWS DIRECTLY — uses blankSBShow() from App level ──
 
-  // ── NATIONAL COSTS (enter once, split across shows) ──
-  const [national, setNational] = useState({
-    intlFlights: 0, visas: 0, insurance: 0,
-    passes: 0, marketing: 0, contingency: 0,
-    artistFee: artistAUD,
-  });
+  // national, setNational now passed as props from App (persisted via save/load)
 
   // ── PER-SHOW DATA ──
-  const blankShow = (s) => ({
-    // from estimator
-    city: s?.city || "",
-    venue: s?.venueName || "",
-    cap: s?.cap || 0,
-    date: "",
-    // ticket scaling
-    catAPrice: s?.ticketPrice || 0,
-    catACap: s?.cap || 0,
-    catAForecast: s?.attendPct || 0.6,
-    catBPrice: 0,
-    catBCap: 0,
-    catBForecast: 0.6,
-    // costs — all blank for actuals
-    venueFlat: s?.flatHire || 0,
-    venuePerHead: 5.5,
-    apra: 0,
-    domFlights: 0,
-    accom: 0,
-    transfers: 0,
-    vanHire: 0,
-    drivers: 0,
-    advancingProd: 0,
-    prodMgr: 0,
-    tourMgr: 0,
-    tourMgrOffDays: 0,
-    opsMgr: 0,
-    stagehands: 0,
-    runners: 0,
-    tourStaff: 0,
-    perDiems: 0,
-    catering: 0,
-    supports: 0,
-    backline: 0,
-    lightingTechs: 0,
-    miscTechs: 0,
-    prodAddOns: 0,
-    marketing: 0,
-    notes: "",
-    vipSold: 0,
-    vipIncludesTicket: true,
-  });
+  // blankShow removed - showData now managed at App level via blankSBShow
 
   // ── VIP PACKAGE COSTS (national) ──
-  const blankVipItem = () => ({ label: "Poster", cost: 0 });
   const VIP_ITEM_LABELS = ["Poster", "Laminate", "Lanyard", "Other"];
-  const [vipItems, setVipItems] = useState([
-    { label: "Poster", cost: 0 },
-    { label: "Laminate", cost: 0 },
-    { label: "Lanyard", cost: 0 },
-  ]);
+  // vipItems, setVipItems now passed as props from App
   const [vipShowItems, setVipShowItems] = useState(false);
 
   // ── DEPOSIT TRACKER ──
   const blankDeposit = () => ({ id: Date.now(), description: "Artist deposit", amount: 0, dueDate: "", paidDate: "", paid: false, notes: "" });
-  const [deposits, setDeposits] = useState([]);
+  // deposits, setDeposits now passed as props from App
   const [showAddDeposit, setShowAddDeposit] = useState(false);
   const [newDeposit, setNewDeposit] = useState(blankDeposit());
 
@@ -2110,22 +2174,17 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
   const delDeposit = (id) => setDeposits(d => d.filter(x => x.id !== id));
 
 
-  const [showData, setShowData] = useState(() => shows.map(s => blankShow(s)));
+  // showData, setShowData now passed as props from App
   const [view, setView] = useState("table"); // "table" | "card"
   const [activeCard, setActiveCard] = useState(0);
 
   const numShows = showData.length;
 
-  // Propagate showData changes (city, venue, cap, date, ticket price) back up to App
-  useEffect(() => {
-    if (onShowDataChange) onShowDataChange(showData);
-  }, [JSON.stringify(showData.map(s => ({ city: s.city, venue: s.venue, cap: s.cap, catAPrice: s.catAPrice, date: s.date })))]);
-
   const updShow = (i, key, val) =>
     setShowData(prev => prev.map((s, j) => j === i ? { ...s, [key]: val } : s));
 
   const addDirectShow = () => {
-    setShowData(prev => [...prev, blankDirectShow()]);
+    setShowData(prev => [...prev, blankSBShow()]);
     setTicketingRecords(prev => [...prev, {
       city: "", venue: "", cap: 0, ticketPrice: 0, showDate: "",
       selectedAgents: [], entries: [], vipLimit: 0, vipIncludesTicket: true,
@@ -2864,7 +2923,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
 // ─── TICKETING TAB ────────────────────────────────────────────────────────
 const AGENTS = ["Oztix", "Moshtix", "Ticketek", "Ticketmaster", "Silverback", "Other"];
 
-function TicketingTab({ shows, artist, ticketingRecords, setTicketingRecords }) {
+function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingRecords }) {
 
   // Each show gets a ticketing record
   const blankRecord = (s) => ({
@@ -3001,9 +3060,9 @@ function TicketingTab({ shows, artist, ticketingRecords, setTicketingRecords }) 
                 style={{ padding: "8px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12,
                   background: activeShow === i ? C.accent : C.panel, color: activeShow === i ? "#fff" : C.muted,
                   display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-                <span>{rec.city || shows[i]?.city || `Show ${i+1}`}</span>
+                <span>{rec.city || showData?.[i]?.city || shows[i]?.city || `Show ${i+1}`}</span>
                 <span style={{ fontSize:10, fontWeight:400, color: activeShow === i ? "rgba(255,255,255,0.7)" : C.muted }}>
-                  {rec.venue || shows[i]?.venueName || ""}
+                  {rec.venue || showData?.[i]?.venue || shows[i]?.venueName || ""}
                 </span>
                 {lat && <span style={{ fontSize: 10, fontWeight: 400, color: activeShow === i ? "rgba(255,255,255,0.7)" : C.muted }}>{p}% sold</span>}
               </button>
@@ -3014,7 +3073,7 @@ function TicketingTab({ shows, artist, ticketingRecords, setTicketingRecords }) 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           {/* LEFT — Show info + current stats */}
           <div>
-            <Section title={`📍 ${r.city || shows[activeShow]?.city || `Show ${activeShow+1}`} — ${r.venue || shows[activeShow]?.venueName || ""}`} accent>
+            <Section title={`📍 ${r.city || showData?.[activeShow]?.city || shows[activeShow]?.city || `Show ${activeShow+1}`} — ${r.venue || showData?.[activeShow]?.venue || shows[activeShow]?.venueName || ""}`} accent>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
                 <div><Label>Show Date</Label>
                   <CalendarPicker value={r.showDate} onChange={v => updRecord(activeShow, "showDate", v)} />
