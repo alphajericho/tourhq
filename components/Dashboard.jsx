@@ -1845,7 +1845,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
   );
 
   // ── TABLE VIEW ──────────────────────────────────────────────────────────
-  const TableView = () => {
+  const tableViewJSX = (() => {
     const cols = ["", ...showData.map((s, i) => `Show ${i + 1}`), "TOTAL"];
     const colW = `repeat(${numShows + 2}, 1fr)`;
 
@@ -1947,10 +1947,10 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
         <TotalRow label="P&L — SELL OUT" values={calcs.map(c=>c.plSellOut)} total={totals.plSellOut} color={v=>v>=0?C.green:C.red} />
       </div>
     );
-  };
+  })();
 
   // ── CARD VIEW ───────────────────────────────────────────────────────────
-  const CardView = () => {
+  const cardViewJSX = (() => {
     const s = showData[activeCard];
     const c = calcs[activeCard];
     if (!s) return null;
@@ -2163,7 +2163,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
         </div>
       </div>
     );
-  };
+  })();
 
   return (
     <div>
@@ -2370,7 +2370,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD }) {
 
       {/* VIEWS */}
       <div style={{ background: C.panel, borderRadius: 10, border: `1px solid ${C.border}`, overflow: "hidden" }}>
-        {view === "table" ? <TableView /> : <CardView />}
+        {view === "table" ? tableViewJSX : cardViewJSX}
       </div>
     </div>
   );
@@ -2491,7 +2491,7 @@ function TicketingTab({ shows, artist }) {
   };
 
   // ── ENTRY VIEW ─────────────────────────────────────────────────────────
-  const EntryView = () => {
+  const entryViewJSX = (() => {
     const r = records[activeShow];
     if (!r) return null;
     const latest = latestEntry(r);
@@ -2759,10 +2759,10 @@ function TicketingTab({ shows, artist }) {
         </div>
       </div>
     );
-  };
+  })();
 
   // ── NATIONAL SNAPSHOT VIEW ────────────────────────────────────────────
-  const SnapshotView = () => {
+  const snapshotViewJSX = (() => {
     const rows = records.map((r, i) => {
       const latest = latestEntry(r);
       const total = totalTickets(latest, r);
@@ -2852,7 +2852,7 @@ function TicketingTab({ shows, artist }) {
         </div>
       </div>
     );
-  };
+  })();
 
   return (
     <div>
@@ -2870,7 +2870,7 @@ function TicketingTab({ shows, artist }) {
         </div>
       </div>
 
-      {view === "entry" ? <EntryView /> : <SnapshotView />}
+      {view === "entry" ? entryViewJSX : snapshotViewJSX}
     </div>
   );
 }
