@@ -1210,7 +1210,7 @@ export default function App() {
       {/* ── TICKETING TAB ── */}
       {tab === "ticketing" && (
         <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
-          <TicketingTab shows={shows} showData={showData} artist={artist} ticketingRecords={ticketingRecords} setTicketingRecords={setTicketingRecords} />
+          <TicketingTab shows={shows} showData={showData} artist={artist} ticketingRecords={ticketingRecords} setTicketingRecords={setTicketingRecords} ticketTypes={ticketTypes} />
         </div>
       )}
 
@@ -1532,6 +1532,7 @@ function ResearchTab() {
   const [searchDone, setSearchDone] = useState(false);
   const [similarArtists, setSimilarArtists] = useState([]);
   const [loadingSimilar, setLoadingSimilar] = useState(false);
+  const [lastFmQuery, setLastFmQuery] = useState("");
 
   const iS = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"6px 8px", fontSize:12, width:"100%" };
 
@@ -1823,13 +1824,33 @@ function ResearchTab() {
 
       {/* SIMILAR ARTISTS (Last.fm) */}
       <Section title="🎵 Similar Artists — Last.fm">
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-          <div style={{ fontSize:12, color:C.muted, flex:1 }}>Top similar artists by match score. Useful for market positioning and support act research.</div>
-          <button onClick={()=>fetchSimilarArtists(r.artist)} disabled={!r.artist.trim() || loadingSimilar}
-            style={{ background:loadingSimilar?C.panel:C.accent, border:"none", borderRadius:6, color:loadingSimilar?C.muted:"#fff",
-              padding:"7px 16px", cursor:(!r.artist.trim()||loadingSimilar)?"not-allowed":"pointer", fontWeight:700, fontSize:12 }}>
-            {loadingSimilar ? "Loading…" : "Fetch Similar Artists"}
-          </button>
+        <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>
+          Find artists with a similar audience. Enter an act name below — useful for market positioning and support act research.
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 160px", gap:10, marginBottom:12 }}>
+          <div>
+            <Label>Artist / Act Name</Label>
+            <input
+              value={lastFmQuery}
+              onChange={e => setLastFmQuery(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && !loadingSimilar && (lastFmQuery.trim() || r.artist.trim()) && fetchSimilarArtists(lastFmQuery || r.artist)}
+              placeholder={r.artist ? r.artist : "Enter artist name e.g. Trivium, Parkway Drive…"}
+              style={{ ...iS, fontSize:14, padding:"10px 12px" }}
+            />
+            {r.artist && !lastFmQuery && (
+              <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>
+                Will search for <strong style={{color:C.accent}}>{r.artist}</strong> — or type a different name above
+              </div>
+            )}
+          </div>
+          <div style={{ display:"flex", alignItems:"flex-end" }}>
+            <button onClick={()=>fetchSimilarArtists(lastFmQuery || r.artist)} disabled={!(lastFmQuery.trim() || r.artist.trim()) || loadingSimilar}
+              style={{ width:"100%", padding:"10px 0", background:loadingSimilar?C.panel:(lastFmQuery.trim()||r.artist.trim())?C.accent:C.muted,
+                border:"none", borderRadius:6, color:"#fff",
+                cursor:(!(lastFmQuery.trim()||r.artist.trim())||loadingSimilar)?"not-allowed":"pointer", fontWeight:700, fontSize:13 }}>
+              {loadingSimilar ? "Searching…" : "🔍 Search"}
+            </button>
+          </div>
         </div>
         {loadingSimilar && (
           <div style={{ textAlign:"center", padding:"20px", color:C.muted, fontSize:13 }}>⏳ Searching Last.fm…</div>
@@ -2210,6 +2231,67 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
     return Object.values(latest.agents || {}).reduce((a, v) => a + (+v || 0), 0);
   };
 
+  const getLiveVipSold = (i) => {
+    const rec = ticketingRecords?.[i];
+    if (!rec || !rec.entries.length) return 0;
+    const latest = rec.entries[rec.entries.length - 1];
+    return +latest.vipSold || 0;
+  };
+
+  // Live net revenue: uses ticketTypeCounts from latest Ticket Counts entry for accurate per-type revenue
+  // Falls back to total sold × catAPrice net if no type counts available
+  const getLiveNetRevenue = (s, i) => {
+    const rec = ticketingRecords?.[i];
+    const latest = rec?.entries?.length ? rec.entries[rec.entries.length - 1] : null;
+    const typeCounts = latest?.ticketTypeCounts || {};
+    const hasTypeCounts = Object.keys(typeCounts).length > 0 && ticketTypes?.length > 0;
+
+    if (hasTypeCounts) {
+      // Accurate per-type calculation using Ticket Scaling prices
+      const typeBreakdown = ticketTypes.map(tt => {
+        const sold = +typeCounts[tt.id] || 0;
+        const gross = tt.grossPrice || 0;
+        const fees = tt.fees || 10;
+        const gst = gross / 11;
+        const net = Math.max(0, gross - gst - fees);
+
+        // VIP types: net the ticket component too
+        let revenue = 0;
+        if (tt.type === "VIPWT" || tt.type === "VIPUG") {
+          const linkedType = ticketTypes.find(x => x.id === tt.linkedTypeId);
+          const ticketComp = tt.type === "VIPWT" && linkedType ? (linkedType.grossPrice || 0) : 0;
+          const vipComp = Math.max(0, gross - ticketComp);
+          const vipGst = vipComp / 11;
+          const vipFee = Math.min(9, vipComp * 0.1);
+          const vipNet = Math.max(0, vipComp - vipGst - vipFee);
+          revenue = sold * vipNet;
+        } else {
+          revenue = sold * net;
+        }
+        return { id: tt.id, label: tt.label || tt.type, type: tt.type, sold, net, revenue };
+      });
+      const total = typeBreakdown.reduce((a, t) => a + t.revenue, 0);
+      const gaSold = typeBreakdown.filter(t => t.type !== "VIPWT" && t.type !== "VIPUG").reduce((a,t) => a + t.sold, 0);
+      const vipSold = typeBreakdown.filter(t => t.type === "VIPWT" || t.type === "VIPUG").reduce((a,t) => a + t.sold, 0);
+      const gaRevenue = typeBreakdown.filter(t => t.type !== "VIPWT" && t.type !== "VIPUG").reduce((a,t) => a + t.revenue, 0);
+      const vipRevenue = typeBreakdown.filter(t => t.type === "VIPWT" || t.type === "VIPUG").reduce((a,t) => a + t.revenue, 0);
+      return { gaSold, vipSold, gaRevenue, vipRevenue, total, typeBreakdown, hasTypeCounts: true };
+    }
+
+    // Fallback: use total agent sold count × catAPrice net
+    const gaSold = getLiveSold(i);
+    const vipSold = getLiveVipSold(i);
+    const gaNet = Math.max(0, (s.catAPrice || 0) - 7.95);
+    const gaRevenue = gaSold * gaNet;
+    const vipGross = +s.catBPrice || 0;
+    const ticketComponent = s.vipIncludesTicket ? (+s.catAPrice || 0) : 0;
+    const vipComp = Math.max(0, vipGross - ticketComponent);
+    const vipGstFee = vipComp / 11 + Math.min(9, vipComp * 0.1);
+    const vipNet = Math.max(0, vipComp - vipGstFee);
+    const vipRevenue = vipSold * vipNet;
+    return { gaSold, vipSold, gaRevenue, vipRevenue, total: gaRevenue + vipRevenue, typeBreakdown: null, hasTypeCounts: false };
+  };
+
   // Convert artist fee to AUD for budget calculations
   const artistFeeAUD = national.artistFeeCurrency === 'AUD'
     ? national.artistFee
@@ -2254,7 +2336,12 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
     const plForecast = forecastRev - totalCosts;
     const plSellOut = sellOutRev - totalCosts;
 
-    return { forecastRev, sellOutRev, venueHire, compliance, logistics, showCosts, production, mktg, misc, artistShare, totalCosts, plForecast, plSellOut };
+    // Live current revenue from Ticket Counts
+    const liveData = getLiveNetRevenue(s, i);
+    const liveRev = liveData.total;
+    const plLive = liveRev > 0 ? liveRev - totalCosts : null; // null = no data yet
+
+    return { forecastRev, sellOutRev, liveRev, plLive, liveData, venueHire, compliance, logistics, showCosts, production, mktg, misc, artistShare, totalCosts, plForecast, plSellOut };
   };
 
   const calcs = showData.map((s, i) => showCalc(s, i));
@@ -2350,6 +2437,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
 
         {/* TICKET REVENUE */}
         <HeaderRow label="🎫 Ticket Revenue" accent />
+        <DataRow label="Current Net Revenue" values={calcs.map((c,i) => c.liveData?.total || 0)} total={calcs.reduce((a,c)=>a+(c.liveData?.total||0),0)} color={C.accent} />
         <DataRow label="Forecast Net Revenue" values={calcs.map(c => c.forecastRev)} total={totals.forecastRev} color={C.yellow} />
         <DataRow label="Sell-Out Net Revenue" values={calcs.map(c => c.sellOutRev)} total={totals.sellOutRev} color={C.green} />
 
@@ -2644,7 +2732,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                         style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:4, color:C.text, padding:"3px 6px", fontSize:11, width:70 }} />
                     </div>
                   </div>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:8 }}>
                     <div style={{ background:C.bg, borderRadius:8, padding:"10px 12px", textAlign:"center" }}>
                       <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", marginBottom:3 }}>Sold</div>
                       <div style={{ fontSize:22, fontWeight:900, color:C.accent }}>{liveSold.toLocaleString()}</div>
@@ -2661,6 +2749,82 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                       <div style={{ fontSize:10, color: toBreakeven > 0 ? C.red : C.green }}>{breakeven > 0 ? (toBreakeven > 0 ? `${toBreakeven.toLocaleString()} to go` : "✓ Covered") : ""}</div>
                     </div>
                   </div>
+                  {/* Current Net Revenue from live ticket sales */}
+                  {(() => {
+                    const liveRevData = getLiveNetRevenue(s, activeCard);
+                    const hasLiveData = liveRevData.gaSold > 0 || liveRevData.vipSold > 0;
+                    if (!hasLiveData) return (
+                      <div style={{ background:C.bg, borderRadius:8, padding:"10px 14px", marginBottom:8, fontSize:12, color:C.muted, fontStyle:"italic", textAlign:"center" }}>
+                        No ticket sales recorded yet — add entries in Ticket Counts tab
+                      </div>
+                    );
+                    const livePL = liveRevData.total - c.totalCosts;
+                    return (
+                      <div style={{ background:C.bg, borderRadius:8, padding:"12px 14px", marginBottom:8 }}>
+                        <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", fontWeight:700, marginBottom:8, letterSpacing:1 }}>
+                          💰 Current Net Revenue
+                          {liveRevData.hasTypeCounts && <span style={{ color:C.green, marginLeft:6 }}>● Live by type</span>}
+                        </div>
+
+                        {/* Per-type breakdown if available */}
+                        {liveRevData.hasTypeCounts && liveRevData.typeBreakdown ? (
+                          <div style={{ marginBottom:8 }}>
+                            {liveRevData.typeBreakdown.filter(t => t.sold > 0).map(t => (
+                              <div key={t.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+                                padding:"4px 0", borderBottom:`1px solid ${C.border}` }}>
+                                <span style={{ fontSize:12, color:C.muted }}>
+                                  {t.label}
+                                  <span style={{ fontSize:10, marginLeft:6, color:C.textDim }}>×{t.sold.toLocaleString()} @ net ${t.net.toFixed(2)}</span>
+                                </span>
+                                <span style={{ fontSize:13, fontWeight:700,
+                                  color: (t.type==="VIPWT"||t.type==="VIPUG") ? C.yellow : C.text }}>
+                                  {fmt(t.revenue)}
+                                </span>
+                              </div>
+                            ))}
+                            {liveRevData.typeBreakdown.filter(t => t.sold > 0).length === 0 && (
+                              <div style={{ fontSize:12, color:C.muted, fontStyle:"italic" }}>No type counts entered yet</div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:8 }}>
+                            <div style={{ textAlign:"center" }}>
+                              <div style={{ fontSize:10, color:C.muted, marginBottom:2 }}>GA Revenue</div>
+                              <div style={{ fontSize:15, fontWeight:800, color:C.text }}>{fmt(liveRevData.gaRevenue)}</div>
+                              <div style={{ fontSize:10, color:C.muted }}>{liveRevData.gaSold.toLocaleString()} tickets</div>
+                            </div>
+                            {liveRevData.vipSold > 0 && (
+                              <div style={{ textAlign:"center" }}>
+                                <div style={{ fontSize:10, color:C.muted, marginBottom:2 }}>VIP Revenue</div>
+                                <div style={{ fontSize:15, fontWeight:800, color:C.yellow }}>{fmt(liveRevData.vipRevenue)}</div>
+                                <div style={{ fontSize:10, color:C.muted }}>{liveRevData.vipSold} packages</div>
+                              </div>
+                            )}
+                            <div style={{ textAlign:"center" }}>
+                              <div style={{ fontSize:10, color:C.muted, marginBottom:2 }}>Total Net</div>
+                              <div style={{ fontSize:15, fontWeight:800, color:C.green }}>{fmt(liveRevData.total)}</div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:8, display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                            <span style={{ fontSize:11, color:C.muted }}>Total Net Revenue</span>
+                            <span style={{ fontSize:14, fontWeight:800, color:C.green }}>{fmt(liveRevData.total)}</span>
+                          </div>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                            <span style={{ fontSize:11, color:C.muted }}>Live P&L</span>
+                            <span style={{ fontSize:14, fontWeight:800, color: livePL >= 0 ? C.green : C.red }}>{fmt(livePL)}</span>
+                          </div>
+                        </div>
+                        {!liveRevData.hasTypeCounts && (
+                          <div style={{ fontSize:10, color:C.muted, marginTop:6, fontStyle:"italic" }}>
+                            💡 Add ticket type counts in Ticket Counts tab for accurate per-type revenue
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div style={{ height:6, background:C.bg, borderRadius:3, overflow:"hidden" }}>
                     <div style={{ height:6, borderRadius:3, width:`${Math.min(soldPct,100)}%`,
                       background: soldPct >= (breakeven/s.cap*100) ? C.green : soldPct >= (forecastTarget/s.cap*50) ? C.yellow : C.accent,
@@ -2680,29 +2844,48 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
             })()}
 
             {/* P&L CARD */}
-            <div style={{ background: C.panel, borderRadius: 10, padding: "16px", border: `2px solid ${c.plForecast >= 0 ? C.green : C.red}` }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.textDim, textTransform: "uppercase", marginBottom: 12 }}>Show P&L</div>
-              {[
-                ["Forecast Revenue", c.forecastRev, C.yellow],
-                ["Total Show Costs", c.totalCosts, C.red],
-              ].map(([lbl,val,col])=>(
-                <div key={lbl} style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"5px 0", borderBottom:`1px solid ${C.border}` }}>
-                  <span style={{color:C.muted}}>{lbl}</span>
-                  <span style={{color:col, fontWeight:700}}>{fmt(val)}</span>
+            {(() => {
+              const liveRevData = getLiveNetRevenue(s, activeCard);
+              const hasLive = liveRevData.gaSold > 0 || liveRevData.vipSold > 0;
+              const borderCol = hasLive ? (liveRevData.total - c.totalCosts >= 0 ? C.green : C.red) : (c.plForecast >= 0 ? C.green : C.red);
+              return (
+                <div style={{ background: C.panel, borderRadius: 10, padding: "16px", border: `2px solid ${borderCol}` }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.textDim, textTransform: "uppercase", marginBottom: 12 }}>Show P&L</div>
+                  {/* Live P&L — top row if data exists */}
+                  {hasLive && (
+                    <div style={{ background: C.bg, borderRadius:8, padding:"10px 14px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                      <div>
+                        <div style={{ fontSize:10, color:C.accent, textTransform:"uppercase", fontWeight:700, marginBottom:2 }}>🟢 Live (Current Sales)</div>
+                        <div style={{ fontSize:11, color:C.muted }}>{fmt(liveRevData.total)} net revenue</div>
+                      </div>
+                      <div style={{ fontSize:20, fontWeight:900, color: (liveRevData.total - c.totalCosts) >= 0 ? C.green : C.red }}>
+                        {fmt(liveRevData.total - c.totalCosts)}
+                      </div>
+                    </div>
+                  )}
+                  {[
+                    ["Forecast Revenue", c.forecastRev, C.yellow],
+                    ["Total Show Costs", c.totalCosts, C.red],
+                  ].map(([lbl,val,col])=>(
+                    <div key={lbl} style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"5px 0", borderBottom:`1px solid ${C.border}` }}>
+                      <span style={{color:C.muted}}>{lbl}</span>
+                      <span style={{color:col, fontWeight:700}}>{fmt(val)}</span>
+                    </div>
+                  ))}
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:18, fontWeight:800, padding:"10px 0 4px" }}>
+                    <span>Forecast P&L</span>
+                    <span style={{color: c.plForecast>=0?C.green:C.red}}>{fmt(c.plForecast)}</span>
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:C.muted }}>
+                    <span>Sell-Out P&L</span>
+                    <span style={{color: c.plSellOut>=0?C.green:C.red, fontWeight:700}}>{fmt(c.plSellOut)}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 8, fontStyle: "italic" }}>
+                    Includes allocated share of: artist fee, intl flights, marketing, contingency, passes
+                  </div>
                 </div>
-              ))}
-              <div style={{ display:"flex", justifyContent:"space-between", fontSize:18, fontWeight:800, padding:"10px 0 4px" }}>
-                <span>Forecast P&L</span>
-                <span style={{color: c.plForecast>=0?C.green:C.red}}>{fmt(c.plForecast)}</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:C.muted }}>
-                <span>Sell-Out P&L</span>
-                <span style={{color: c.plSellOut>=0?C.green:C.red, fontWeight:700}}>{fmt(c.plSellOut)}</span>
-              </div>
-              <div style={{ fontSize: 11, color: C.muted, marginTop: 8, fontStyle: "italic" }}>
-                Includes allocated share of: artist fee, intl flights, marketing, contingency, passes
-              </div>
-            </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -2959,7 +3142,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
 // ─── TICKETING TAB ────────────────────────────────────────────────────────
 const AGENTS = ["Oztix", "Moshtix", "Ticketek", "Ticketmaster", "Silverback", "Other"];
 
-function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingRecords }) {
+function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingRecords, ticketTypes }) {
 
   // Each show gets a ticketing record
   const blankRecord = (s) => ({
@@ -2986,6 +3169,7 @@ function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingR
     dateFrom: "",
     dateTo: "",
     agents: {},
+    ticketTypeCounts: {}, // per ticket type ID: { [typeId]: count }
     vipSold: "",
     vipLimit: "",
     vipIncludesTicket: true,
@@ -2999,6 +3183,7 @@ function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingR
     const entry = {
       ...newEntry,
       agents: { ...newEntry.agents },
+      ticketTypeCounts: { ...newEntry.ticketTypeCounts },
       id: Date.now(),
     };
     setRecords(prev => prev.map((r, j) => j === i ? { ...r, entries: [...r.entries, entry] } : r));
@@ -3009,6 +3194,7 @@ function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingR
       dateFrom: "",
       dateTo: "",
       agents: {},
+      ticketTypeCounts: {},
       vipSold: "",
       vipLimit: "",
       vipIncludesTicket: true,
@@ -3266,6 +3452,32 @@ function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingR
                     </div>
                   )}
                 </div>
+
+                {/* Ticket Type Counts — only shown if ticketTypes has entries */}
+                {ticketTypes && ticketTypes.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <Label>Tickets by Type</Label>
+                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>Enter running totals per ticket category — used for accurate revenue calculations</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {ticketTypes.map(tt => {
+                        const fees = tt.fees || 10;
+                        const gst = tt.grossPrice / 11;
+                        const net = Math.max(0, tt.grossPrice - gst - fees);
+                        return (
+                          <div key={tt.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 13, color: C.text, minWidth: 130, fontWeight: 600 }}>
+                              {tt.label || tt.type}
+                              <span style={{ fontSize: 10, color: C.muted, fontWeight: 400, marginLeft: 4 }}>(net ${net.toFixed(2)})</span>
+                            </span>
+                            <input type="number" value={newEntry.ticketTypeCounts?.[tt.id] || ""} placeholder="0"
+                              onChange={e => setNewEntry(n => ({...n, ticketTypeCounts: {...(n.ticketTypeCounts||{}), [tt.id]: +e.target.value}}))}
+                              style={{ ...iS, width: 120 }} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* VIP */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
