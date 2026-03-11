@@ -404,6 +404,9 @@ export default function App() {
       if (p.shows) setShows(p.shows);
       if (p.party) setParty(p.party);
       if (p.fx) setFx(p.fx);
+      if (p.ticketTypes) setTicketTypes(p.ticketTypes);
+      if (p.vipPackageCost) setVipPackageCost(p.vipPackageCost);
+      if (p.ticketingRecords) setTicketingRecords(p.ticketingRecords);
       setShowTourPanel(false);
       setSaveMsg(`✅ Loaded: ${tour.name}`);
       setTimeout(() => setSaveMsg(""), 3000);
@@ -412,7 +415,7 @@ export default function App() {
 
   const saveTour = async () => {
     setSaving(true);
-    const payload = { artist, shows, party, fx };
+    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords };
     try {
       if (activeTourId) {
         await fetch('/api/tours', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -478,6 +481,13 @@ export default function App() {
     selectedAgents: [], entries: [], vipLimit: 0, vipIncludesTicket: true,
   });
   const [ticketingRecords, setTicketingRecords] = useState([blankTicketRecord()]);
+
+  // ── TICKET SCALING (defined once per tour, propagates to all tabs) ──
+  const defaultTicketTypes = () => [
+    { id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 },
+  ];
+  const [ticketTypes, setTicketTypes] = useState(defaultTicketTypes());
+  const [vipPackageCost, setVipPackageCost] = useState({ poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 });
 
   // ── TOUR PARTY ──
   const [party, setParty] = useState({ band: 4, crew: 2, local: 3, intlFlightCost: 0, intlFlightPax: 0, domLegs: 0, domCostPerLeg: 350, domPax: 0, accomNights: 0, accomRooms: 0, accomRate: 180, sprinterLegs: 0, sprinterCost: 500, vanDays: 0, vans: 1, vanRate: 150, drivers: 0, driverDays: 0, driverRate: 350, perDiemPax: 0, pdRate: 75, pdShows: 0, catering: 0, cateringShows: 0, visaPax: 0, visaFee: 420, union: 150, tourMgrRate: 600, tourMgrDays: 0, stagehandShows: 0, stagehandRate: 440, supportStaff: 0, supportRate: 450, supports: 0, supportFee: 400, backlineShows: 0, backlineCost: 2200, lightingShows: 0, lightingRate: 550, marketing: 500, publicist: 1500, creative: 1000, contingency: 5000, passes: 350 });
@@ -643,6 +653,7 @@ export default function App() {
       <div style={{ padding: "0 24px", paddingTop: 16, display: "flex", borderBottom: `1px solid ${C.border}` }}>
         {[
           ["estimator","💰 Budget Estimator"],
+          ["ticketscaling","🎟️ Ticket Scaling"],
           ["showbyshow","📋 Show By Show"],
           ["ticketing","🎫 Ticket Counts"],
           ["venues","🏟️ Venue Database"],
@@ -1015,10 +1026,22 @@ export default function App() {
         </div>
       )}
 
+      {/* ── TICKET SCALING TAB ── */}
+      {tab === "ticketscaling" && (
+        <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
+          <TicketScalingTab
+            ticketTypes={ticketTypes}
+            setTicketTypes={setTicketTypes}
+            vipPackageCost={vipPackageCost}
+            setVipPackageCost={setVipPackageCost}
+          />
+        </div>
+      )}
+
       {/* ── SHOW BY SHOW TAB ── */}
       {tab === "showbyshow" && (
         <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
-          <ShowByShowTab shows={shows} artist={artist} fx={fx} artistAUD={artistAUD} ticketingRecords={ticketingRecords} setTicketingRecords={setTicketingRecords} />
+          <ShowByShowTab shows={shows} artist={artist} fx={fx} artistAUD={artistAUD} ticketingRecords={ticketingRecords} setTicketingRecords={setTicketingRecords} ticketTypes={ticketTypes} vipPackageCost={vipPackageCost} />
         </div>
       )}
 
@@ -1682,8 +1705,280 @@ function ResearchTab() {
   );
 }
 
+
+// ─── TICKET SCALING TAB ───────────────────────────────────────────────────────
+function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipPackageCost }) {
+  const C = COLORS;
+  const fmt = (v) => "$" + Number(v || 0).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const TYPES = ["GA", "Seated", "VIPWT", "VIPUG"];
+  const TYPE_LABELS = { GA: "General Admission", Seated: "Seated", VIPWT: "VIP (with Ticket)", VIPUG: "VIP Upgrade (no Ticket)" };
+
+  const nextId = () => Math.max(0, ...ticketTypes.map(t => t.id)) + 1;
+
+  const addType = () => {
+    setTicketTypes(prev => [...prev, {
+      id: nextId(), type: "GA", label: "General Admission",
+      grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6,
+      ticketLinkId: null, // for VIPWT: which GA/Seated type is the ticket component
+    }]);
+  };
+
+  const updType = (id, key, val) =>
+    setTicketTypes(prev => prev.map(t => t.id === id ? { ...t, [key]: val } : t));
+
+  const removeType = (id) => {
+    if (ticketTypes.length <= 1) return;
+    setTicketTypes(prev => prev.filter(t => t.id !== id));
+  };
+
+  // Calc derived values for a ticket type
+  const calc = (t) => {
+    const gross = +t.grossPrice || 0;
+    const fees = +t.fees || 0;
+    const gst = gross / 11;
+    const netBeforeFees = gross - gst;
+    const net = Math.max(0, gross - gst - fees);
+
+    if (t.type === "VIPWT") {
+      // Find the linked ticket type for ticket component
+      const linked = ticketTypes.find(x => x.id === t.ticketLinkId);
+      const ticketComponent = linked ? (+linked.grossPrice || 0) : 0;
+      const vipGross = Math.max(0, gross - ticketComponent);
+      const vipGst = vipGross / 11;
+      // Booking fee applies only to VIP component (ticket fees already in linked type)
+      const vipFees = fees;
+      const netVipComponent = Math.max(0, vipGross - vipGst - vipFees);
+      // Package cost calc
+      const pkgItems = (+vipPackageCost.poster||0) + (+vipPackageCost.laminate||0) + (+vipPackageCost.lanyard||0) + (+vipPackageCost.other||0);
+      const prepFee = pkgItems * ((+vipPackageCost.prepPct||10) / 100);
+      const totalPkgCost = pkgItems + prepFee;
+      const netAfterPkg = Math.max(0, netVipComponent - totalPkgCost);
+      return { gross, fees, gst, net, ticketComponent, vipGross, vipGst, vipFees, netVipComponent, totalPkgCost, netAfterPkg, isVipwt: true };
+    }
+
+    if (t.type === "VIPUG") {
+      // No ticket component - pure upgrade
+      const ugGst = gross / 11;
+      const netUg = Math.max(0, gross - ugGst - fees);
+      const pkgItems = (+vipPackageCost.poster||0) + (+vipPackageCost.laminate||0) + (+vipPackageCost.lanyard||0) + (+vipPackageCost.other||0);
+      const prepFee = pkgItems * ((+vipPackageCost.prepPct||10) / 100);
+      const totalPkgCost = pkgItems + prepFee;
+      const netAfterPkg = Math.max(0, netUg - totalPkgCost);
+      return { gross, fees, gst, net: netUg, ugGst, netUg, totalPkgCost, netAfterPkg, isVipug: true };
+    }
+
+    return { gross, fees, gst, netBeforeFees, net };
+  };
+
+  // VIP package cost totals
+  const pkgItems = (+vipPackageCost.poster||0) + (+vipPackageCost.laminate||0) + (+vipPackageCost.lanyard||0) + (+vipPackageCost.other||0);
+  const prepFee = pkgItems * ((+vipPackageCost.prepPct||10) / 100);
+  const totalPkgCost = pkgItems + prepFee;
+
+  const iS = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, padding: "6px 8px", fontSize: 13, width: "100%" };
+  const hasVip = ticketTypes.some(t => t.type === "VIPWT" || t.type === "VIPUG");
+  const gaSeatedTypes = ticketTypes.filter(t => t.type === "GA" || t.type === "Seated");
+
+  return (
+    <div>
+      {/* HEADER */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: C.text }}>🎟️ Ticket Scaling</div>
+          <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>Define your ticket types once — values propagate to Show by Show, Estimator, and Ticket Counts.</div>
+        </div>
+        <button onClick={addType}
+          style={{ background: C.accent, border:"none", borderRadius:8, color:"#fff", padding:"9px 20px", cursor:"pointer", fontWeight:700, fontSize:13 }}>
+          + Add Ticket Type
+        </button>
+      </div>
+
+      {/* TICKET TYPES */}
+      {ticketTypes.map((t, idx) => {
+        const c = calc(t);
+        return (
+          <div key={t.id} style={{ background: C.panel, borderRadius: 12, padding: 20, marginBottom: 16, border: `1px solid ${C.border}` }}>
+            {/* Row header */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: 14 }}>
+              <div style={{ display:"flex", gap: 10, alignItems:"center" }}>
+                <select value={t.type} onChange={e => {
+                  const newType = e.target.value;
+                  updType(t.id, "type", newType);
+                  updType(t.id, "label", TYPE_LABELS[newType]);
+                }} style={{ ...iS, width: 180, fontWeight: 700 }}>
+                  {TYPES.map(tp => <option key={tp} value={tp}>{tp} — {TYPE_LABELS[tp]}</option>)}
+                </select>
+                <input type="text" value={t.label} onChange={e => updType(t.id, "label", e.target.value)}
+                  placeholder="Custom label..." style={{ ...iS, width: 220 }} />
+              </div>
+              {ticketTypes.length > 1 && (
+                <button onClick={() => removeType(t.id)}
+                  style={{ background:"transparent", border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, padding:"4px 12px", cursor:"pointer", fontSize:12 }}>
+                  Remove
+                </button>
+              )}
+            </div>
+
+            {/* Price breakdown grid */}
+            <div style={{ display:"grid", gridTemplateColumns: t.type === "VIPWT" ? "repeat(6,1fr)" : "repeat(5,1fr)", gap: 10, marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Gross Sale Price</div>
+                <input type="number" value={t.grossPrice || ""} onChange={e => updType(t.id, "grossPrice", +e.target.value)}
+                  placeholder="0" style={iS} />
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Booking / Venue Fees</div>
+                <input type="number" value={t.fees || ""} onChange={e => updType(t.id, "fees", +e.target.value)}
+                  placeholder="10" style={iS} />
+                <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>Default $10 est.</div>
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>GST (÷11)</div>
+                <div style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, padding:"6px 8px", fontSize:13, color:C.yellow }}>
+                  {fmt(c.gst)}
+                </div>
+                <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>of gross</div>
+              </div>
+              {t.type === "VIPWT" && (
+                <div>
+                  <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Ticket Component</div>
+                  <select value={t.ticketLinkId || ""} onChange={e => updType(t.id, "ticketLinkId", e.target.value ? +e.target.value : null)}
+                    style={{ ...iS }}>
+                    <option value="">— select GA/Seated —</option>
+                    {gaSeatedTypes.map(gs => (
+                      <option key={gs.id} value={gs.id}>{gs.label} ({fmt(gs.grossPrice)})</option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>price of included ticket</div>
+                </div>
+              )}
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>
+                  {t.type === "VIPWT" ? "Net VIP Component" : t.type === "VIPUG" ? "Net (after GST+fees)" : "Net Ticket Price"}
+                </div>
+                <div style={{ background:C.bg, border:`1px solid ${C.green}`, borderRadius:5, padding:"6px 8px", fontSize:15, fontWeight:800, color:C.green }}>
+                  {t.type === "VIPWT" ? fmt(c.netVipComponent) : fmt(c.net)}
+                </div>
+                <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>
+                  {t.type === "VIPWT" ? `VIP gross: ${fmt(c.vipGross)}` : "what you keep per ticket"}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Allocation</div>
+                <input type="number" value={t.allocation || ""} onChange={e => updType(t.id, "allocation", +e.target.value)}
+                  placeholder="0" style={iS} />
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Forecast %</div>
+                <input type="number" value={Math.round((t.forecast||0.6)*100)} onChange={e => updType(t.id, "forecast", (+e.target.value)/100)}
+                  style={iS} />
+                {t.allocation > 0 && <div style={{ fontSize:10, color:C.yellow, marginTop:2 }}>= {Math.round(t.allocation * (t.forecast||0.6)).toLocaleString()} tickets</div>}
+              </div>
+            </div>
+
+            {/* Breakdown pill row */}
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              {t.type === "VIPWT" ? (<>
+                <span style={{ background:C.bg, borderRadius:20, padding:"3px 10px", fontSize:11, color:C.muted }}>
+                  Gross {fmt(c.gross)} → ticket component {fmt(c.ticketComponent)} → VIP gross {fmt(c.vipGross)}
+                </span>
+                <span style={{ background:C.bg, borderRadius:20, padding:"3px 10px", fontSize:11, color:C.muted }}>
+                  GST {fmt(c.vipGst)} + fees {fmt(c.fees)} → Net VIP {fmt(c.netVipComponent)}
+                </span>
+                {totalPkgCost > 0 && (
+                  <span style={{ background:C.bg, borderRadius:20, padding:"3px 10px", fontSize:11, color:C.accent }}>
+                    Less pkg cost {fmt(totalPkgCost)} → Net after pkg {fmt(c.netAfterPkg)}
+                  </span>
+                )}
+              </>) : t.type === "VIPUG" ? (<>
+                <span style={{ background:C.bg, borderRadius:20, padding:"3px 10px", fontSize:11, color:C.muted }}>
+                  Gross {fmt(c.gross)} → GST {fmt(c.gst)} + fees {fmt(c.fees)} → Net {fmt(c.net)}
+                </span>
+                {totalPkgCost > 0 && (
+                  <span style={{ background:C.bg, borderRadius:20, padding:"3px 10px", fontSize:11, color:C.accent }}>
+                    Less pkg cost {fmt(totalPkgCost)} → Net after pkg {fmt(c.netAfterPkg)}
+                  </span>
+                )}
+              </>) : (
+                <span style={{ background:C.bg, borderRadius:20, padding:"3px 10px", fontSize:11, color:C.muted }}>
+                  Gross {fmt(c.gross)} → GST {fmt(c.gst)} → Less fees {fmt(c.fees)} → Net {fmt(c.net)}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* VIP PACKAGE COSTS (shown only if a VIP type exists) */}
+      {hasVip && (
+        <div style={{ background: C.panel, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 14 }}>⭐ VIP Package Costs — Per Package</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:14 }}>
+            {[["Poster","poster"],["Laminate","laminate"],["Lanyard","lanyard"],["Other","other"]].map(([label,key]) => (
+              <div key={key}>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>{label}</div>
+                <input type="number" value={vipPackageCost[key] || ""} onChange={e => setVipPackageCost(p => ({...p, [key]: +e.target.value}))}
+                  placeholder="0" style={iS} />
+              </div>
+            ))}
+            <div>
+              <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Prep / Fulfilment %</div>
+              <input type="number" value={vipPackageCost.prepPct || ""} onChange={e => setVipPackageCost(p => ({...p, prepPct: +e.target.value}))}
+                placeholder="10" style={iS} />
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:16, background:C.bg, borderRadius:8, padding:"12px 16px" }}>
+            <div style={{ fontSize:13, color:C.muted }}>Items total: <strong style={{color:C.text}}>{fmt(pkgItems)}</strong></div>
+            <div style={{ fontSize:13, color:C.muted }}>Prep fee ({vipPackageCost.prepPct||10}%): <strong style={{color:C.yellow}}>{fmt(prepFee)}</strong></div>
+            <div style={{ fontSize:14, color:C.muted }}>Cost per package: <strong style={{color:C.red, fontSize:16}}>{fmt(totalPkgCost)}</strong></div>
+            <div style={{ fontSize:13, color:C.muted, marginLeft:"auto" }}>Artist 70% / You 30% split applies to net VIP revenue</div>
+          </div>
+        </div>
+      )}
+
+      {/* PROPAGATION SUMMARY */}
+      <div style={{ background: C.panel, borderRadius: 12, padding: 20, marginTop: 16, border: `1px solid ${C.border}` }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.textDim, textTransform:"uppercase", marginBottom:12 }}>📡 Tour Revenue Summary — Based on These Types</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10 }}>
+          {ticketTypes.map(t => {
+            const c = calc(t);
+            const forecastSold = Math.round((t.allocation||0) * (t.forecast||0.6));
+            const forecastRev = forecastSold * (t.type === "VIPWT" ? c.netVipComponent : c.net);
+            const sellOutRev = (t.allocation||0) * (t.type === "VIPWT" ? c.netVipComponent : c.net);
+            return (
+              <div key={t.id} style={{ background:C.bg, borderRadius:8, padding:"12px 14px" }}>
+                <div style={{ fontSize:12, fontWeight:700, color:C.accent, marginBottom:6 }}>{t.label}</div>
+                <div style={{ fontSize:11, color:C.muted }}>Forecast sold: <strong style={{color:C.text}}>{forecastSold.toLocaleString()}</strong></div>
+                <div style={{ fontSize:11, color:C.muted }}>Forecast net rev: <strong style={{color:C.yellow}}>{fmt(forecastRev)}</strong></div>
+                <div style={{ fontSize:11, color:C.muted }}>Sell-out net rev: <strong style={{color:C.green}}>{fmt(sellOutRev)}</strong></div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display:"flex", gap:16, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.border}` }}>
+          {(() => {
+            const totForecast = ticketTypes.reduce((sum, t) => {
+              const c = calc(t);
+              return sum + Math.round((t.allocation||0) * (t.forecast||0.6)) * (t.type === "VIPWT" ? c.netVipComponent : c.net);
+            }, 0);
+            const totSellOut = ticketTypes.reduce((sum, t) => {
+              const c = calc(t);
+              return sum + (t.allocation||0) * (t.type === "VIPWT" ? c.netVipComponent : c.net);
+            }, 0);
+            return (<>
+              <div style={{ fontSize:14, color:C.muted }}>Total Forecast Net: <strong style={{color:C.yellow, fontSize:16}}>${totForecast.toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>
+              <div style={{ fontSize:14, color:C.muted }}>Total Sell-Out Net: <strong style={{color:C.green, fontSize:16}}>${totSellOut.toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>
+            </>);
+          })()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── SHOW BY SHOW TAB ─────────────────────────────────────────────────────
-function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTicketingRecords }) {
+function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTicketingRecords, ticketTypes, vipPackageCost }) {
 
   // ── ADD/REMOVE SHOWS DIRECTLY ──
   const blankDirectShow = () => ({
@@ -2060,30 +2355,52 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
             </Section>
 
             <Section title="🎫 Ticket Scaling">
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, marginBottom: 8 }}>CATEGORY A</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 4 }}>
-                <div><Label>Gross Price</Label><input type="number" value={s.catAPrice} onChange={e=>updShow(activeCard,"catAPrice",+e.target.value)} style={iS} /></div>
-                <div><Label>Allocation</Label><input type="number" value={s.catACap} onChange={e=>updShow(activeCard,"catACap",+e.target.value)} style={iS} /></div>
-                <div>
-                  <Label>Forecast %</Label>
-                  <input type="number" value={Math.round(s.catAForecast*100)} onChange={e=>updShow(activeCard,"catAForecast",(+e.target.value)/100)} style={iS} />
-                  {s.catACap > 0 && <div style={{ fontSize:10, color:C.yellow, marginTop:2 }}>= {Math.round(s.catACap * s.catAForecast).toLocaleString()} tickets</div>}
+              {ticketTypes && ticketTypes.length > 0 ? (<>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:10, fontStyle:"italic" }}>
+                  Prices from 🎟️ Ticket Scaling tab. Adjust forecast % and allocation per show below.
                 </div>
-              </div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, marginBottom: 8, marginTop: 8 }}>CATEGORY B (VIP / Premium)</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                <div><Label>Gross Price</Label><input type="number" value={s.catBPrice} onChange={e=>updShow(activeCard,"catBPrice",+e.target.value)} style={iS} /></div>
-                <div><Label>Allocation</Label><input type="number" value={s.catBCap} onChange={e=>updShow(activeCard,"catBCap",+e.target.value)} style={iS} /></div>
-                <div>
-                  <Label>Forecast %</Label>
-                  <input type="number" value={Math.round(s.catBForecast*100)} onChange={e=>updShow(activeCard,"catBForecast",(+e.target.value)/100)} style={iS} />
-                  {s.catBCap > 0 && <div style={{ fontSize:10, color:C.yellow, marginTop:2 }}>= {Math.round(s.catBCap * s.catBForecast).toLocaleString()} tickets</div>}
+                {ticketTypes.map((tt, ti) => {
+                  const gst = (+tt.grossPrice||0) / 11;
+                  const net = Math.max(0, (+tt.grossPrice||0) - gst - (+tt.fees||10));
+                  const showKey = `tt_alloc_${tt.id}`;
+                  const fcKey = `tt_fc_${tt.id}`;
+                  const alloc = s[showKey] !== undefined ? s[showKey] : (tt.allocation || 0);
+                  const fc = s[fcKey] !== undefined ? s[fcKey] : (tt.forecast || 0.6);
+                  const forecastTix = Math.round(alloc * fc);
+                  const forecastRev = forecastTix * net;
+                  return (
+                    <div key={tt.id} style={{ background:C.bg, borderRadius:8, padding:"10px 12px", marginBottom:8 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                        <div>
+                          <span style={{ fontWeight:700, fontSize:13, color:C.text }}>{tt.label}</span>
+                          <span style={{ fontSize:11, color:C.muted, marginLeft:8 }}>Gross {fmt(+tt.grossPrice||0)} → Net {fmt(net)}</span>
+                        </div>
+                        <span style={{ fontSize:11, color:C.yellow }}>{forecastTix.toLocaleString()} tickets forecast → {fmt(forecastRev)}</span>
+                      </div>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                        <div>
+                          <Label>Allocation (this show)</Label>
+                          <input type="number" value={alloc || ""} placeholder={String(tt.allocation||0)}
+                            onChange={e => updShow(activeCard, showKey, +e.target.value)} style={iS} />
+                        </div>
+                        <div>
+                          <Label>Forecast %</Label>
+                          <input type="number" value={Math.round(fc*100)} onChange={e => updShow(activeCard, fcKey, (+e.target.value)/100)} style={iS} />
+                          {alloc > 0 && <div style={{ fontSize:10, color:C.yellow, marginTop:2 }}>= {Math.round(alloc*fc).toLocaleString()} tickets</div>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{ background: C.bg, borderRadius: 6, padding: "10px 12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop:4 }}>
+                  <div style={{ fontSize: 12, color: C.muted }}>Forecast Net: <strong style={{color:C.yellow}}>{fmt(c.forecastRev)}</strong></div>
+                  <div style={{ fontSize: 12, color: C.muted }}>Sell-Out Net: <strong style={{color:C.green}}>{fmt(c.sellOutRev)}</strong></div>
                 </div>
-              </div>
-              <div style={{ marginTop: 10, background: C.bg, borderRadius: 6, padding: "10px 12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div style={{ fontSize: 12, color: C.muted }}>Forecast Net: <strong style={{color:C.yellow}}>{fmt(c.forecastRev)}</strong></div>
-                <div style={{ fontSize: 12, color: C.muted }}>Sell-Out Net: <strong style={{color:C.green}}>{fmt(c.sellOutRev)}</strong></div>
-              </div>
+              </>) : (
+                <div style={{ fontSize:13, color:C.muted, textAlign:"center", padding:20 }}>
+                  Go to 🎟️ Ticket Scaling tab to set up your ticket types first.
+                </div>
+              )}
             </Section>
 
             {/* VIP REVENUE */}
