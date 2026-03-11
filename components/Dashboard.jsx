@@ -478,32 +478,39 @@ export default function App() {
 
   // ── TICKETING RECORDS (lifted from TicketingTab so ShowByShow can read live sales) ──
   const blankTicketRecord = (s) => ({
-    city: s?.city || "", venue: s?.venueName || s?.venue || "", cap: s?.cap || 0,
-    ticketPrice: s?.ticketPrice || 0, showDate: s?.date || s?.showDate || "",
-    selectedAgents: [], entries: [], vipLimit: 0, vipIncludesTicket: true,
+    city: s?.city || "",
+    venue: s?.venueName || s?.venue || "",
+    cap: s?.cap || 0,
+    ticketPrice: s?.ticketPrice || 0,
+    showDate: s?.date || s?.showDate || "",
+    selectedAgents: [],
+    entries: [],
+    vipLimit: 0,
+    vipIncludesTicket: true,
   });
   const [ticketingRecords, setTicketingRecords] = useState(() => [blankTicketRecord()]);
 
-  // Keep ticketingRecords in sync with shows array length and show data
+  // Keep ticketingRecords in sync with shows — runs whenever shows change (length OR content)
   useEffect(() => {
     setTicketingRecords(prev => {
-      const next = shows.map((s, i) => {
-        const existing = prev[i];
-        if (existing) {
-          // Update city/venue/cap from shows if not manually overridden
-          return {
-            ...existing,
-            city: existing.city || s.city || "",
-            venue: existing.venue || s.venueName || "",
-            cap: existing.cap || s.cap || 0,
-            ticketPrice: existing.ticketPrice || s.ticketPrice || 0,
-          };
-        }
-        return blankTicketRecord(s);
+      return shows.map((s, i) => {
+        const existing = prev[i] || {};
+        return {
+          // Always overwrite show-sourced fields so edits propagate
+          city: s.city || "",
+          venue: s.venueName || s.venue || "",
+          cap: s.cap || 0,
+          ticketPrice: s.ticketPrice || 0,
+          showDate: s.date || existing.showDate || "",
+          // Preserve ticketing-only fields entered in Ticket Counts tab
+          selectedAgents: existing.selectedAgents || [],
+          entries: existing.entries || [],
+          vipLimit: existing.vipLimit || 0,
+          vipIncludesTicket: existing.vipIncludesTicket !== undefined ? existing.vipIncludesTicket : true,
+        };
       });
-      return next;
     });
-  }, [shows.length]);
+  }, [JSON.stringify(shows.map(s => ({ city: s.city, venue: s.venueName, cap: s.cap, ticketPrice: s.ticketPrice, date: s.date })))]);
 
   // ── TICKET SCALING (defined once per tour, propagates to all tabs) ──
   const defaultTicketTypes = () => [
@@ -1064,7 +1071,7 @@ export default function App() {
       {/* ── SHOW BY SHOW TAB ── */}
       {tab === "showbyshow" && (
         <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
-          <ShowByShowTab shows={shows} artist={artist} fx={fx} artistAUD={artistAUD} ticketingRecords={ticketingRecords} setTicketingRecords={setTicketingRecords} ticketTypes={ticketTypes} vipPackageCost={vipPackageCost} />
+          <ShowByShowTab shows={shows} artist={artist} fx={fx} artistAUD={artistAUD} ticketingRecords={ticketingRecords} setTicketingRecords={setTicketingRecords} ticketTypes={ticketTypes} vipPackageCost={vipPackageCost} onShowDataChange={(sd) => setTicketingRecords(prev => prev.map((r, i) => sd[i] ? { ...r, city: sd[i].city || r.city, venue: sd[i].venue || r.venue, cap: sd[i].cap || r.cap, ticketPrice: sd[i].catAPrice || r.ticketPrice, showDate: sd[i].date || r.showDate } : r))} />
         </div>
       )}
 
@@ -2001,7 +2008,7 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
 }
 
 // ─── SHOW BY SHOW TAB ─────────────────────────────────────────────────────
-function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTicketingRecords, ticketTypes, vipPackageCost }) {
+function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTicketingRecords, ticketTypes, vipPackageCost, onShowDataChange }) {
 
   // ── ADD/REMOVE SHOWS DIRECTLY ──
   const blankDirectShow = () => ({
@@ -2099,6 +2106,11 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
   const [activeCard, setActiveCard] = useState(0);
 
   const numShows = showData.length;
+
+  // Propagate showData changes (city, venue, cap, date, ticket price) back up to App
+  useEffect(() => {
+    if (onShowDataChange) onShowDataChange(showData);
+  }, [JSON.stringify(showData.map(s => ({ city: s.city, venue: s.venue, cap: s.cap, catAPrice: s.catAPrice, date: s.date })))]);
 
   const updShow = (i, key, val) =>
     setShowData(prev => prev.map((s, j) => j === i ? { ...s, [key]: val } : s));
