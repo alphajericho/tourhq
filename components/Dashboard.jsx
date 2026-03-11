@@ -477,11 +477,33 @@ export default function App() {
   const addShow = () => setShows(prev => [...prev, defaultShow()]);
 
   // ── TICKETING RECORDS (lifted from TicketingTab so ShowByShow can read live sales) ──
-  const blankTicketRecord = () => ({
-    city: "", venue: "", cap: 0, ticketPrice: 0, showDate: "",
+  const blankTicketRecord = (s) => ({
+    city: s?.city || "", venue: s?.venueName || s?.venue || "", cap: s?.cap || 0,
+    ticketPrice: s?.ticketPrice || 0, showDate: s?.date || s?.showDate || "",
     selectedAgents: [], entries: [], vipLimit: 0, vipIncludesTicket: true,
   });
-  const [ticketingRecords, setTicketingRecords] = useState([blankTicketRecord()]);
+  const [ticketingRecords, setTicketingRecords] = useState(() => [blankTicketRecord()]);
+
+  // Keep ticketingRecords in sync with shows array length and show data
+  useEffect(() => {
+    setTicketingRecords(prev => {
+      const next = shows.map((s, i) => {
+        const existing = prev[i];
+        if (existing) {
+          // Update city/venue/cap from shows if not manually overridden
+          return {
+            ...existing,
+            city: existing.city || s.city || "",
+            venue: existing.venue || s.venueName || "",
+            cap: existing.cap || s.cap || 0,
+            ticketPrice: existing.ticketPrice || s.ticketPrice || 0,
+          };
+        }
+        return blankTicketRecord(s);
+      });
+      return next;
+    });
+  }, [shows.length]);
 
   // ── TICKET SCALING (defined once per tour, propagates to all tabs) ──
   const defaultTicketTypes = () => [
@@ -2958,7 +2980,10 @@ function TicketingTab({ shows, artist, ticketingRecords, setTicketingRecords }) 
                 style={{ padding: "8px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12,
                   background: activeShow === i ? C.accent : C.panel, color: activeShow === i ? "#fff" : C.muted,
                   display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-                <span>{rec.city || `Show ${i+1}`}</span>
+                <span>{rec.city || shows[i]?.city || `Show ${i+1}`}</span>
+                <span style={{ fontSize:10, fontWeight:400, color: activeShow === i ? "rgba(255,255,255,0.7)" : C.muted }}>
+                  {rec.venue || shows[i]?.venueName || ""}
+                </span>
                 {lat && <span style={{ fontSize: 10, fontWeight: 400, color: activeShow === i ? "rgba(255,255,255,0.7)" : C.muted }}>{p}% sold</span>}
               </button>
             );
@@ -2968,7 +2993,7 @@ function TicketingTab({ shows, artist, ticketingRecords, setTicketingRecords }) 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           {/* LEFT — Show info + current stats */}
           <div>
-            <Section title={`📍 ${r.city || `Show ${activeShow+1}`} — ${r.venue}`} accent>
+            <Section title={`📍 ${r.city || shows[activeShow]?.city || `Show ${activeShow+1}`} — ${r.venue || shows[activeShow]?.venueName || ""}`} accent>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
                 <div><Label>Show Date</Label>
                   <CalendarPicker value={r.showDate} onChange={v => updRecord(activeShow, "showDate", v)} />
