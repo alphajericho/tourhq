@@ -299,18 +299,235 @@ function Tab({ label, active, onClick }) {
   );
 }
 
+// ─── DEAL BUILDER ─────────────────────────────────────────────────────────
+// Shared component for building artist deal terms at tour or per-show level
+// deal = { type, currency, guarantee, pct, expenses, steps }
+// expenses = { venueHire, production, marketing, showCosts } booleans
+// steps = [{ threshold, pct|amount }] for stepped deals
+const DEAL_TYPES = [
+  { value: "Flat Guarantee",  label: "Flat Guarantee",  desc: "Fixed fee paid regardless of ticket sales" },
+  { value: "VS Deal",         label: "VS Deal",         desc: "Guarantee vs % of net — artist takes whichever is higher" },
+  { value: "Straight %",      label: "Straight %",      desc: "No guarantee — artist takes % of net box office after agreed expenses" },
+  { value: "Stepped %",       label: "Stepped % Steps", desc: "Artist % increases at ticket sale thresholds" },
+  { value: "Stepped $",       label: "Stepped $ Tiers", desc: "Fixed dollar splits per revenue tier — first X to promoter, then split" },
+  { value: "Door Deal",       label: "Door Deal",       desc: "Artist takes % of door after venue costs" },
+];
+
+const BLANK_DEAL = {
+  type: "Flat Guarantee",
+  currency: "USD",
+  guarantee: 0,
+  pct: 70,
+  expenses: { venueHire: true, production: false, marketing: false, showCosts: false },
+  steps: [{ threshold: 0, value: 60 }, { threshold: 500, value: 70 }],
+};
+
+function DealBuilder({ deal, onChange, fx, compact }) {
+  const d = deal || BLANK_DEAL;
+  const iS = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" };
+  const checkS = { accentColor: C.accent };
+
+  const addStep = () => onChange({ ...d, steps: [...(d.steps||[]), { threshold: 0, value: 60 }] });
+  const removeStep = (i) => onChange({ ...d, steps: d.steps.filter((_,j)=>j!==i) });
+  const updStep = (i, key, val) => onChange({ ...d, steps: d.steps.map((s,j)=>j===i?{...s,[key]:val}:s) });
+
+  const selectedType = DEAL_TYPES.find(t => t.value === d.type) || DEAL_TYPES[0];
+  const needsGuarantee = d.type === "Flat Guarantee" || d.type === "VS Deal";
+  const needsPct = d.type === "VS Deal" || d.type === "Straight %" || d.type === "Door Deal";
+  const needsExpenses = d.type === "VS Deal" || d.type === "Straight %" || d.type === "Door Deal";
+  const needsSteps = d.type === "Stepped %" || d.type === "Stepped $";
+
+  return (
+    <div style={{ background: C.panel, borderRadius: 8, padding: compact ? "12px 14px" : "16px 18px", border: `1px solid ${C.border}` }}>
+
+      {/* Deal type selector */}
+      <div style={{ marginBottom: 12 }}>
+        <Label>Deal Type</Label>
+        <select value={d.type} onChange={e => onChange({ ...d, type: e.target.value })} style={iS}>
+          {DEAL_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 4, fontStyle: "italic" }}>{selectedType.desc}</div>
+      </div>
+
+      {/* Currency + Guarantee */}
+      {needsGuarantee && (
+        <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, marginBottom: 12 }}>
+          <div>
+            <Label>Currency</Label>
+            <select value={d.currency||"USD"} onChange={e => onChange({ ...d, currency: e.target.value })} style={iS}>
+              {["USD","GBP","EUR","AUD"].map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label>{d.type === "VS Deal" ? "Guarantee" : "Fee"}</Label>
+            <input type="number" value={d.guarantee||""} placeholder="0"
+              onChange={e => onChange({ ...d, guarantee: +e.target.value })} style={iS} />
+          </div>
+        </div>
+      )}
+
+      {/* % of net */}
+      {needsPct && (
+        <div style={{ marginBottom: 12 }}>
+          <Label>{d.type === "VS Deal" ? "Artist % of Net (if higher than guarantee)" : d.type === "Door Deal" ? "Artist % of Door" : "Artist % of Net Box Office"}</Label>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="number" value={d.pct||""} placeholder="70" min="0" max="100"
+              onChange={e => onChange({ ...d, pct: +e.target.value })} style={{ ...iS, width: 100 }} />
+            <span style={{ color: C.muted, fontSize: 13 }}>%</span>
+            <span style={{ color: C.muted, fontSize: 11 }}>Promoter keeps {100 - (d.pct||0)}%</span>
+          </div>
+        </div>
+      )}
+
+      {/* Agreed expenses — what comes out before % is calculated */}
+      {needsExpenses && (
+        <div style={{ marginBottom: 12 }}>
+          <Label>Expenses deducted before % is calculated</Label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 6 }}>
+            {[
+              ["venueHire",   "Venue Hire"],
+              ["production",  "Production"],
+              ["marketing",   "Marketing"],
+              ["showCosts",   "All Show Costs"],
+            ].map(([key, label]) => (
+              <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: C.text }}>
+                <input type="checkbox" checked={d.expenses?.[key] || false}
+                  onChange={e => onChange({ ...d, expenses: { ...(d.expenses||{}), [key]: e.target.checked } })}
+                  style={checkS} />
+                {label}
+              </label>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+            Net = Gross box office − ticketing fees − GST {Object.entries(d.expenses||{}).some(([,v])=>v) ? "− " + Object.entries(d.expenses||{}).filter(([,v])=>v).map(([k])=>k==="venueHire"?"venue hire":k==="showCosts"?"all show costs":k).join(" − ") : ""}
+          </div>
+        </div>
+      )}
+
+      {/* Stepped % tiers */}
+      {needsSteps && (
+        <div style={{ marginBottom: 12 }}>
+          <Label>{d.type === "Stepped %" ? "Ticket Sale Thresholds → Artist %" : "Revenue Tiers → Artist Split"}</Label>
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
+            {d.type === "Stepped %" ? "Artist % increases once tickets sold exceeds each threshold" : "Dollar amount promoter keeps before split kicks in at each tier"}
+          </div>
+          {(d.steps||[]).map((step, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 32px", gap: 6, marginBottom: 6, alignItems: "center" }}>
+              <div>
+                <Label style={{ fontSize: 10 }}>{d.type === "Stepped %" ? `Threshold ${i+1} (tickets sold)` : `Tier ${i+1} ($ revenue)`}</Label>
+                <input type="number" value={step.threshold||""} placeholder={i===0?"0":"e.g. 500"}
+                  onChange={e => updStep(i, "threshold", +e.target.value)} style={iS} />
+              </div>
+              <div>
+                <Label style={{ fontSize: 10 }}>{d.type === "Stepped %" ? "Artist %" : "Artist $ (above tier)"}</Label>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input type="number" value={step.value||""} placeholder={d.type === "Stepped %" ? "70" : "0"}
+                    onChange={e => updStep(i, "value", +e.target.value)} style={iS} />
+                  <span style={{ color: C.muted, fontSize: 12, whiteSpace:"nowrap" }}>{d.type === "Stepped %" ? "%" : "$"}</span>
+                </div>
+              </div>
+              <button onClick={() => removeStep(i)} disabled={(d.steps||[]).length <= 1}
+                style={{ background: "none", border: "none", color: (d.steps||[]).length <= 1 ? C.border : C.red, cursor: "pointer", fontSize: 18, paddingTop: 16 }}>×</button>
+            </div>
+          ))}
+          <button onClick={addStep}
+            style={{ background: "none", border: `1px dashed ${C.border}`, borderRadius: 6, color: C.muted, padding: "5px 14px", cursor: "pointer", fontSize: 12, marginTop: 4 }}>
+            + Add {d.type === "Stepped %" ? "Tier" : "Step"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── DEAL CALCULATOR ──────────────────────────────────────────────────────
+// Given a deal and show financials, returns what the artist gets
+function calcArtistPayout(deal, grossBoxOffice, costs) {
+  if (!deal) return 0;
+  const d = deal;
+  const ticketingFees = grossBoxOffice * 0.1; // ~10% ticketing + GST
+  const netBoxOffice = Math.max(0, grossBoxOffice - ticketingFees);
+
+  // Build agreed expenses deduction
+  const expDeductions =
+    ((d.expenses?.venueHire  ? costs.venueHire  : 0)) +
+    ((d.expenses?.production ? costs.production : 0)) +
+    ((d.expenses?.marketing  ? costs.mktg       : 0)) +
+    ((d.expenses?.showCosts  ? costs.totalCosts : 0));
+
+  const netAfterExpenses = Math.max(0, netBoxOffice - expDeductions);
+
+  switch (d.type) {
+    case "Flat Guarantee":
+      return d.guarantee || 0;
+
+    case "VS Deal": {
+      const guar = d.guarantee || 0;
+      const pctAmt = netAfterExpenses * ((d.pct || 70) / 100);
+      return Math.max(guar, pctAmt);
+    }
+
+    case "Straight %":
+      return netAfterExpenses * ((d.pct || 70) / 100);
+
+    case "Door Deal":
+      return Math.max(0, netBoxOffice - (costs.venueHire || 0)) * ((d.pct || 70) / 100);
+
+    case "Stepped %": {
+      // Find which tier applies based on tickets sold (approximate from gross)
+      const ticketsSold = costs.ticketsSold || 0;
+      const steps = [...(d.steps || [])].sort((a, b) => b.threshold - a.threshold);
+      const step = steps.find(s => ticketsSold >= s.threshold) || steps[steps.length - 1];
+      return netAfterExpenses * ((step?.value || 70) / 100);
+    }
+
+    case "Stepped $": {
+      // Tiers: each step defines revenue threshold and artist $ above it
+      const steps = [...(d.steps || [])].sort((a, b) => a.threshold - b.threshold);
+      let artistTotal = 0;
+      for (let i = 0; i < steps.length; i++) {
+        const tierStart = steps[i].threshold;
+        const tierEnd = steps[i + 1]?.threshold || Infinity;
+        const inTier = Math.min(Math.max(0, netAfterExpenses - tierStart), tierEnd - tierStart);
+        if (inTier > 0) artistTotal += inTier * ((steps[i].value || 0) / 100);
+      }
+      return artistTotal;
+    }
+
+    default:
+      return d.guarantee || 0;
+  }
+}
+
 // ─── SHOW ROW for budget ───────────────────────────────────────────────────
-function ShowRow({ show, idx, onChange, onRemove, venues }) {
+function ShowRow({ show, idx, onChange, onRemove, venues, onAddVenue }) {
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customVenue, setCustomVenue] = useState({ name:"", cap:0, dealType:"flat", hire:0, perHead:5.5, notes:"" });
+
   const venuesForCity = venues.filter(v => v.city === show.city);
   const selVenue = venuesForCity.find(v => v.name === show.venueName);
 
   const handleCity = (city) => {
     const firstVenue = venues.find(v => v.city === city);
-    onChange(idx, { ...show, city, venueName: firstVenue?.name || "", cap: firstVenue?.cap || 0, flatHire: firstVenue?.hire || 0 });
+    onChange(idx, { ...show, city, venueName: firstVenue?.name || "", cap: firstVenue?.cap || 0,
+      flatHire: firstVenue?.hire || 0, perHead: firstVenue?.perHead || 5.5 });
   };
+
   const handleVenue = (name) => {
+    if (name === "__custom__") { setShowCustomForm(true); return; }
     const v = venues.find(vn => vn.name === name);
-    onChange(idx, { ...show, venueName: name, cap: v?.cap || show.cap, flatHire: v?.hire || show.flatHire });
+    onChange(idx, { ...show, venueName: name, cap: v?.cap || show.cap,
+      flatHire: v?.hire ?? show.flatHire, perHead: v?.perHead ?? show.perHead ?? 5.5 });
+  };
+
+  const saveCustomVenue = () => {
+    if (!customVenue.name.trim()) return;
+    const newV = { ...BLANK_VENUE, city: show.city, state: "NSW", ...customVenue, _id: Date.now() };
+    onAddVenue(newV);
+    onChange(idx, { ...show, venueName: customVenue.name, cap: customVenue.cap,
+      flatHire: customVenue.hire, perHead: customVenue.perHead });
+    setShowCustomForm(false);
+    setCustomVenue({ name:"", cap:0, dealType:"flat", hire:0, perHead:5.5, notes:"" });
   };
 
   const allCities = [...new Set(venues.map(v => v.city))].sort();
@@ -318,6 +535,7 @@ function ShowRow({ show, idx, onChange, onRemove, venues }) {
   const netPerTix = Math.max(0, grossPerTix - 7.95);
   const sellOutNet = netPerTix * show.cap;
   const forecastNet = netPerTix * show.cap * show.attendPct;
+  const iS = { background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: "7px 10px", width: "100%", fontSize: 13 };
 
   return (
     <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", marginBottom: 10 }}>
@@ -325,47 +543,123 @@ function ShowRow({ show, idx, onChange, onRemove, venues }) {
         <div style={{ fontWeight: 700, color: C.accent, fontSize: 13 }}>SHOW {idx + 1}</div>
         <button onClick={() => onRemove(idx)} style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
       </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
         <div>
           <Label>City</Label>
-          <select value={show.city} onChange={e => handleCity(e.target.value)}
-            style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: "7px 10px", width: "100%", fontSize: 13 }}>
+          <select value={show.city} onChange={e => handleCity(e.target.value)} style={iS}>
             {allCities.map(c => <option key={c}>{c}</option>)}
           </select>
         </div>
         <div>
           <Label>Venue</Label>
-          <select value={show.venueName} onChange={e => handleVenue(e.target.value)}
-            style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: "7px 10px", width: "100%", fontSize: 13 }}>
+          <select value={show.venueName} onChange={e => handleVenue(e.target.value)} style={iS}>
             {venuesForCity.map(v => <option key={v.name}>{v.name}</option>)}
-            <option value="__custom__">Custom…</option>
+            <option value="__custom__">+ Add Custom Venue…</option>
           </select>
         </div>
         <div>
           <Label>Capacity</Label>
-          <input type="number" value={show.cap} onChange={e => onChange(idx, { ...show, cap: +e.target.value })}
-            style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: "7px 10px", width: "100%", fontSize: 13 }} />
+          <input type="number" value={show.cap} onChange={e => onChange(idx, { ...show, cap: +e.target.value })} style={iS} />
         </div>
         <div>
           <Label>Ticket Price (gross)</Label>
-          <input type="number" value={show.ticketPrice} onChange={e => onChange(idx, { ...show, ticketPrice: +e.target.value })}
-            style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: "7px 10px", width: "100%", fontSize: 13 }} />
+          <input type="number" value={show.ticketPrice} onChange={e => onChange(idx, { ...show, ticketPrice: +e.target.value })} style={iS} />
         </div>
         <div>
           <Label>Flat Hire ($)</Label>
-          <input type="number" value={show.flatHire} onChange={e => onChange(idx, { ...show, flatHire: +e.target.value })}
-            style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: "7px 10px", width: "100%", fontSize: 13 }} />
+          <input type="number" value={show.flatHire ?? 0} onChange={e => onChange(idx, { ...show, flatHire: +e.target.value })} style={iS} placeholder="0" />
+        </div>
+        <div>
+          <Label>Per Head ($)</Label>
+          <input type="number" step="0.5" value={show.perHead ?? 5.5} onChange={e => onChange(idx, { ...show, perHead: +e.target.value })} style={iS} placeholder="5.50" />
         </div>
         <div>
           <Label>Forecast Attend %</Label>
-          <input type="number" value={Math.round(show.attendPct * 100)} onChange={e => onChange(idx, { ...show, attendPct: (+e.target.value) / 100 })}
-            style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: "7px 10px", width: "100%", fontSize: 13 }} />
+          <input type="number" value={Math.round(show.attendPct * 100)} onChange={e => onChange(idx, { ...show, attendPct: (+e.target.value) / 100 })} style={iS} />
+        </div>
+        <div style={{ gridColumn: "2 / 4" }}>
+          <Label>Notes (optional)</Label>
+          <input value={show.notes || ""} onChange={e => onChange(idx, { ...show, notes: e.target.value })}
+            placeholder="e.g. supports confirmed, PA deal, special requirements…" style={iS} />
         </div>
       </div>
+
+      {/* Per-show deal override */}
+      <div style={{ marginTop: 10 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, color: C.muted, marginBottom: 6 }}>
+          <input type="checkbox" checked={!!show.dealOverride}
+            onChange={e => onChange(idx, { ...show, dealOverride: e.target.checked, showDeal: e.target.checked ? (show.showDeal || { ...BLANK_DEAL }) : null })}
+            style={{ accentColor: C.accent }} />
+          Override tour deal for this show
+        </label>
+        {show.dealOverride && (
+          <DealBuilder deal={show.showDeal || BLANK_DEAL}
+            onChange={d => onChange(idx, { ...show, showDeal: d })}
+            fx={{}} compact />
+        )}
+      </div>
+
+      {/* Custom venue inline form */}
+      {showCustomForm && (
+        <div style={{ background: C.panel, borderRadius: 8, padding: "14px 16px", marginTop: 12, border: `1px solid ${C.accent}` }}>
+          <div style={{ fontWeight: 700, color: C.accent, fontSize: 12, marginBottom: 10 }}>NEW CUSTOM VENUE — will save to Venue Database</div>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+            <div>
+              <Label>Venue Name</Label>
+              <input value={customVenue.name} onChange={e => setCustomVenue(v=>({...v,name:e.target.value}))}
+                placeholder="e.g. The Triffid" style={iS} />
+            </div>
+            <div>
+              <Label>Capacity</Label>
+              <input type="number" value={customVenue.cap||""} onChange={e => setCustomVenue(v=>({...v,cap:+e.target.value}))}
+                placeholder="0" style={iS} />
+            </div>
+            <div>
+              <Label>Deal Type</Label>
+              <select value={customVenue.dealType} onChange={e => setCustomVenue(v=>({...v,dealType:e.target.value}))} style={iS}>
+                <option value="flat">Flat Hire</option>
+                <option value="door">Door Deal</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr", gap: 8, marginBottom: 8 }}>
+            <div>
+              <Label>Flat Hire ($)</Label>
+              <input type="number" value={customVenue.hire||""} placeholder="0"
+                disabled={customVenue.dealType==="door"}
+                onChange={e => setCustomVenue(v=>({...v,hire:+e.target.value}))}
+                style={{ ...iS, opacity: customVenue.dealType==="door" ? 0.4 : 1 }} />
+            </div>
+            <div>
+              <Label>Per Head ($)</Label>
+              <input type="number" step="0.5" value={customVenue.perHead||""} placeholder="5.50"
+                onChange={e => setCustomVenue(v=>({...v,perHead:+e.target.value}))} style={iS} />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <input value={customVenue.notes||""} onChange={e => setCustomVenue(v=>({...v,notes:e.target.value}))}
+                placeholder="e.g. loading dock rear, PA available…" style={iS} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={saveCustomVenue}
+              style={{ background: C.green, border: "none", borderRadius: 6, color: "#fff", padding: "7px 20px", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+              Save & Use Venue
+            </button>
+            <button onClick={() => setShowCustomForm(false)}
+              style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.muted, padding: "7px 14px", cursor: "pointer", fontSize: 13 }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
         <div style={{ fontSize: 12, color: C.muted }}>Net/tix: <span style={{ color: C.text }}>{fmt(netPerTix)}</span></div>
         <div style={{ fontSize: 12, color: C.muted }}>Sell-out net: <span style={{ color: C.green }}>{fmt(sellOutNet)}</span></div>
         <div style={{ fontSize: 12, color: C.muted }}>Forecast net: <span style={{ color: C.yellow }}>{fmt(forecastNet)}</span></div>
+        {selVenue?.notes && <div style={{ fontSize: 12, color: C.muted, fontStyle: "italic" }}>📌 {selVenue.notes}</div>}
       </div>
     </div>
   );
@@ -445,7 +739,7 @@ export default function App() {
 
   const resetTourData = () => {
     setActiveTourId(null);
-    setArtist({ name: "", agent: "", status: "IN CONSIDERATION", dealCurrency: "USD", dealAmt: 0, dealType: "Flat Guarantee" });
+    setArtist({ name: "", agent: "", status: "IN CONSIDERATION", deal: { ...BLANK_DEAL } });
     setShows([defaultShow()]);
     setParty({ band: 4, crew: 2, local: 3, intlFlightCost: 0, intlFlightPax: 0, domLegs: 0, domCostPerLeg: 350, domPax: 0, accomNights: 0, accomRooms: 0, accomRate: 180, sprinterLegs: 0, sprinterCost: 500, vanDays: 0, vans: 1, vanRate: 150, drivers: 0, driverDays: 0, driverRate: 350, perDiemPax: 0, pdRate: 75, pdShows: 0, catering: 0, cateringShows: 0, visaPax: 0, visaFee: 420, union: 150, tourMgrRate: 600, tourMgrDays: 0, stagehandShows: 0, stagehandRate: 440, supportStaff: 0, supportRate: 450, supports: 0, supportFee: 400, backlineShows: 0, backlineCost: 2200, lightingShows: 0, lightingRate: 550, marketing: 500, publicist: 1500, creative: 1000, contingency: 5000, passes: 350 });
     setTicketTypes([{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 }]);
@@ -471,7 +765,7 @@ export default function App() {
     setShowNameModal(false);
     // Create the tour record immediately so autosave has an ID to work with
     setSaving(true);
-    const payload = { artist: { name: "", agent: "", status: "IN CONSIDERATION", dealCurrency: "USD", dealAmt: 0, dealType: "Flat Guarantee" }, shows: [defaultShow()], party: {}, fx, ticketTypes: [{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 }], vipPackageCost: { poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 }, ticketingRecords: [blankTicketRecord()], showData: [blankSBShow()], national: { intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0, artistFeeCurrency: 'USD' }, vipItems: [{ label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 }], deposits: [], venues: VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i })) };
+    const payload = { artist: { name: "", agent: "", status: "IN CONSIDERATION", deal: { ...BLANK_DEAL } }, shows: [defaultShow()], party: {}, fx, ticketTypes: [{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 }], vipPackageCost: { poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 }, ticketingRecords: [blankTicketRecord()], showData: [blankSBShow()], national: { intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0, artistFeeCurrency: 'USD' }, vipItems: [{ label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 }], deposits: [], venues: VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i })) };
     try {
       const res = await fetch('/api/tours', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: pendingName.trim(), artist_name: "", status: "IN CONSIDERATION", payload }) });
@@ -506,10 +800,10 @@ export default function App() {
   }, []);
 
   // ── ARTIST ──
-  const [artist, setArtist] = useState({ name: "", agent: "", status: "IN CONSIDERATION", dealCurrency: "USD", dealAmt: 0, dealType: "Flat Guarantee" });
+  const [artist, setArtist] = useState({ name: "", agent: "", status: "IN CONSIDERATION", deal: { ...BLANK_DEAL } });
 
   // ── SHOWS ──
-  const defaultShow = () => ({ city: "Sydney", venueName: "Metro Theatre", cap: 1000, ticketPrice: 79.95, flatHire: 2000, attendPct: 0.6 });
+  const defaultShow = () => ({ city: "Sydney", venueName: "Metro Theatre", cap: 1000, ticketPrice: 79.95, flatHire: 2000, perHead: 5.5, attendPct: 0.6, notes: "" });
   const [shows, setShows] = useState([defaultShow()]);
   const updateShow = useCallback((i, s) => setShows(prev => prev.map((x, j) => j === i ? s : x)), []);
   const removeShow = useCallback((i) => setShows(prev => prev.filter((_, j) => j !== i)), []);
@@ -592,14 +886,30 @@ export default function App() {
   const p = party;
 
   // ── ARTIST DEAL ──
-  const artistAUD = artist.dealCurrency === "AUD" ? artist.dealAmt : artist.dealAmt * (fx[artist.dealCurrency] || 1);
+  // artistAUD — compute for all deal types using forecast revenue
+  const artistDeal = artist.deal || BLANK_DEAL;
+  // Build a combined costs object for the whole tour for deal calc
+  const tourCostsForDeal = {
+    venueHire: 0, // will be per-show, but use 0 for tour-level estimate
+    production: 0,
+    mktg: 0,
+    totalCosts: 0,
+    ticketsSold: 0,
+  };
+  const guaranteeAUD = artistDeal.currency === "AUD"
+    ? (artistDeal.guarantee || 0)
+    : (artistDeal.guarantee || 0) * (fx[artistDeal.currency] || 1);
+  // For flat guarantee use guarantee directly; for others estimate using forecast
+  const artistAUD = artistDeal.type === "Flat Guarantee"
+    ? guaranteeAUD
+    : 0; // % deals computed per show in showCalc — shown in deal breakdown panel // % and stepped deals: payout calculated per show in showCalc
 
   // ── TOUR COSTS CALC ──
   const numShows = shows.length;
   const totalCap = shows.reduce((s, v) => s + v.cap, 0);
   const totalSellOutNet = shows.reduce((s, v) => s + Math.max(0, v.ticketPrice - 7.95) * v.cap, 0);
   const totalForecastNet = shows.reduce((s, v) => s + Math.max(0, v.ticketPrice - 7.95) * v.cap * v.attendPct, 0);
-  const totalVenueHire = shows.reduce((s, v) => s + (v.flatHire || 0) + (5.5 * v.cap), 0);
+  const totalVenueHire = shows.reduce((s, v) => s + (v.flatHire || 0) + ((v.perHead ?? 5.5) * v.cap), 0);
 
   const costs = {
     visa: p.visaPax * (p.visaFee + p.union),
@@ -837,27 +1147,110 @@ export default function App() {
                   <Input label="Artist Name" value={artist.name} onChange={v => setArtist(a=>({...a,name:v}))} type="text" />
                   <Input label="Agent" value={artist.agent} onChange={v => setArtist(a=>({...a,agent:v}))} type="text" />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                <div style={{ marginBottom: 8 }}>
                   <Select label="Status" value={artist.status} onChange={v => setArtist(a=>({...a,status:v}))}
                     options={["IN CONSIDERATION","OFFER MADE","CONFIRMED","DECLINED"]} />
-                  <Select label="Deal Type" value={artist.dealType} onChange={v => setArtist(a=>({...a,dealType:v}))}
-                    options={["Flat Guarantee","Vs Deal","Stepped Deal"]} />
-                  <Select label="Currency" value={artist.dealCurrency} onChange={v => setArtist(a=>({...a,dealCurrency:v}))}
-                    options={["USD","GBP","EUR","AUD"]} />
                 </div>
-                <Input label={`Fee in ${artist.dealCurrency}`} value={artist.dealAmt} onChange={v => setArtist(a=>({...a,dealAmt:v}))} prefix={artist.dealCurrency === "AUD" ? "$" : ""} />
-                <div style={{ background: C.bg, borderRadius: 6, padding: "10px 14px", border: `1px solid ${C.border}` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ color: C.muted, fontSize: 12 }}>AUD Equivalent</span>
-                    <span style={{ color: C.accent, fontWeight: 700, fontSize: 16 }}>{fmt(artistAUD)}</span>
-                  </div>
-                </div>
+                <DealBuilder
+                  deal={artist.deal || BLANK_DEAL}
+                  onChange={d => setArtist(a => ({ ...a, deal: d }))}
+                  fx={fx}
+                />
+                {/* Deal breakdown — shows what the deal means in plain numbers */}
+                {(() => {
+                  const d = artist.deal || BLANK_DEAL;
+                  const gAUD = d.currency === "AUD" ? (d.guarantee||0) : (d.guarantee||0) * (fx[d.currency]||1);
+                  const expLabels = [];
+                  if (d.expenses?.venueHire)  expLabels.push("venue hire");
+                  if (d.expenses?.production) expLabels.push("production");
+                  if (d.expenses?.marketing)  expLabels.push("marketing");
+                  if (d.expenses?.showCosts)  expLabels.push("all show costs");
+                  return (
+                    <div style={{ background: C.bg, borderRadius: 6, padding: "12px 14px", border: `1px solid ${C.border}`, marginTop: 8, fontSize: 12 }}>
+                      <div style={{ fontWeight: 700, color: C.accent, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Deal Summary</div>
+                      {d.type === "Flat Guarantee" && (
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ color: C.muted }}>Fixed fee — paid regardless of ticket sales</span>
+                          <span style={{ color: C.accent, fontWeight: 700, fontSize: 15 }}>{fmt(gAUD)} AUD</span>
+                        </div>
+                      )}
+                      {d.type === "VS Deal" && (
+                        <>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span style={{ color: C.muted }}>Guarantee (minimum)</span>
+                            <span style={{ color: C.text, fontWeight: 600 }}>{d.currency} {fmtN(d.guarantee||0)} = {fmt(gAUD)} AUD</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span style={{ color: C.muted }}>VS: {d.pct||70}% of net{expLabels.length ? " after " + expLabels.join(", ") : ""}</span>
+                            <span style={{ color: C.yellow, fontWeight: 600 }}>whichever is higher</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 4, fontStyle: "italic" }}>
+                            Artist earns: MAX(guarantee, {d.pct||70}% × net box office{expLabels.length ? " − " + expLabels.join(" − ") : ""})
+                          </div>
+                        </>
+                      )}
+                      {d.type === "Straight %" && (
+                        <>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span style={{ color: C.muted }}>Artist takes {d.pct||70}% of net box office</span>
+                            <span style={{ color: C.muted }}>Promoter keeps {100-(d.pct||70)}%</span>
+                          </div>
+                          {expLabels.length > 0 && (
+                            <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic" }}>
+                              Net = gross box office − ticketing fees − GST − {expLabels.join(" − ")}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {d.type === "Door Deal" && (
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ color: C.muted }}>Artist takes {d.pct||70}% of door after venue costs</span>
+                          <span style={{ color: C.muted }}>Promoter keeps {100-(d.pct||70)}%</span>
+                        </div>
+                      )}
+                      {d.type === "Stepped %" && (d.steps||[]).length > 0 && (
+                        <>
+                          <div style={{ color: C.muted, marginBottom: 6 }}>Artist % increases at these ticket thresholds:</div>
+                          {[...(d.steps||[])].sort((a,b)=>a.threshold-b.threshold).map((step,i) => (
+                            <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0", borderBottom:`1px solid ${C.border}` }}>
+                              <span style={{ color: C.muted }}>{step.threshold === 0 ? "From 0 tickets" : `${step.threshold.toLocaleString()}+ tickets`}</span>
+                              <span style={{ color: C.green, fontWeight: 700 }}>{step.value}% of net</span>
+                            </div>
+                          ))}
+                          {expLabels.length > 0 && (
+                            <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic", marginTop: 4 }}>
+                              Net calculated after: {expLabels.join(", ")}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {d.type === "Stepped $" && (d.steps||[]).length > 0 && (
+                        <>
+                          <div style={{ color: C.muted, marginBottom: 6 }}>Revenue tiers — artist share per tier:</div>
+                          {[...(d.steps||[])].sort((a,b)=>a.threshold-b.threshold).map((step,i,arr) => (
+                            <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0", borderBottom:`1px solid ${C.border}` }}>
+                              <span style={{ color: C.muted }}>
+                                {fmt(step.threshold)} → {arr[i+1] ? fmt(arr[i+1].threshold) : "sell-out"}
+                              </span>
+                              <span style={{ color: C.green, fontWeight: 700 }}>{step.value}% to artist</span>
+                            </div>
+                          ))}
+                          {expLabels.length > 0 && (
+                            <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic", marginTop: 4 }}>
+                              Applied after: {expLabels.join(", ")}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
               </Section>
 
               {/* SHOWS */}
               <Section title="📍 Shows & Venues">
                 {shows.map((s, i) => (
-                  <ShowRow key={i} show={s} idx={i} onChange={updateShow} onRemove={removeShow} venues={VENUE_DB} />
+                  <ShowRow key={i} show={s} idx={i} onChange={updateShow} onRemove={removeShow} venues={venues} onAddVenue={v => setVenues(prev => [...prev, v])} />
                 ))}
                 <button onClick={addShow}
                   style={{ width: "100%", padding: "10px", border: `2px dashed ${C.border}`, borderRadius: 8, background: "none", color: C.muted, cursor: "pointer", fontSize: 13, marginTop: 4 }}>
@@ -1012,17 +1405,28 @@ export default function App() {
                   <Stat label="Sell-Out Net Revenue" value={fmt(totalSellOutNet)} color={C.green} />
                 </div>
                 <div style={{ borderRadius: 8, overflow: "hidden", border: `1px solid ${C.border}` }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr 1fr", background: C.bg, padding: "8px 12px", fontSize: 11, color: C.muted, textTransform: "uppercase", gap: 8 }}>
-                    <span>Fill %</span><span>Net Revenue</span><span>After OpEx</span><span>Headroom for Artist</span><span></span>
+                  <div style={{ display: "grid", gridTemplateColumns: "70px 1fr 1fr 1fr 1fr 30px", background: C.bg, padding: "8px 12px", fontSize: 11, color: C.muted, textTransform: "uppercase", gap: 8 }}>
+                    <span>Fill %</span><span>Net Revenue</span><span>After OpEx</span><span>Artist Payout</span><span>Promoter P&L</span><span></span>
                   </div>
                   {scenarioPcts.map(sp => {
                     const rev = scenarioRevenue(sp);
                     const afterOpEx = rev - totalOpEx;
                     const isTarget = Math.round(sp * 100) === offerTargetBE;
                     const isPositive = afterOpEx >= 0;
+                    // Estimate artist payout using deal calc with tour-level costs
+                    const ticketsSold = Math.round(shows.reduce((s,v) => s + v.cap * sp, 0));
+                    const estCosts = {
+                      venueHire: totalVenueHire,
+                      production: totalProduction,
+                      mktg: totalMarketing,
+                      totalCosts: totalOpEx,
+                      ticketsSold,
+                    };
+                    const artistPayout = calcArtistPayout(artistDeal, rev, estCosts);
+                    const promoterPL = afterOpEx - artistPayout;
                     return (
                       <div key={sp} style={{
-                        display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr 1fr",
+                        display: "grid", gridTemplateColumns: "70px 1fr 1fr 1fr 1fr 30px",
                         padding: "9px 12px", fontSize: 13, borderTop: `1px solid ${C.border}`,
                         background: isTarget ? "rgba(249,115,22,0.12)" : isPositive ? "rgba(34,197,94,0.04)" : "transparent",
                         gap: 8
@@ -1032,11 +1436,14 @@ export default function App() {
                         </span>
                         <span style={{ color: C.textDim }}>{fmt(rev)}</span>
                         <span style={{ color: isPositive ? C.green : C.red, fontWeight: 600 }}>{fmt(afterOpEx)}</span>
-                        <span style={{ color: isPositive ? C.accent : C.muted, fontWeight: isTarget ? 800 : 400 }}>
-                          {isPositive ? fmt(afterOpEx) : "—"}
+                        <span style={{ color: C.accent, fontWeight: isTarget ? 800 : 400 }}>
+                          {isPositive ? fmt(artistPayout) : "—"}
+                        </span>
+                        <span style={{ color: promoterPL >= 0 ? C.green : C.red, fontWeight: isTarget ? 800 : 400 }}>
+                          {isPositive ? fmt(promoterPL) : "—"}
                         </span>
                         <span style={{ fontSize: 11, color: isTarget ? C.accent : isPositive ? C.green : C.red }}>
-                          {isTarget ? "🎯 TARGET BE" : isPositive ? "✅" : "❌"}
+                          {isTarget ? "🎯" : isPositive ? "✅" : "❌"}
                         </span>
                       </div>
                     );
@@ -2330,18 +2737,25 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
     const production = s.backline + s.lightingTechs + s.miscTechs + s.prodAddOns;
     const mktg = s.marketing + (natPerShow.marketing || 0);
     const misc = natPerShow.contingency || 0;
-    const artistShare = natPerShow.artistFee || 0;
+
+    // Artist payout — use per-show deal override if set, else tour-level deal
+    const activeDeal = s.dealOverride && s.showDeal ? s.showDeal : (artist?.deal || BLANK_DEAL);
+    const liveData0 = getLiveNetRevenue(s, i);
+    const costsForDeal = { venueHire, production, mktg, totalCosts: venueHire + compliance + logistics + showCosts + production + mktg + misc, ticketsSold: getLiveSold(i) };
+    const artistShare = calcArtistPayout(activeDeal, forecastRev, costsForDeal);
+    const artistShareSellOut = calcArtistPayout(activeDeal, sellOutRev, { ...costsForDeal, ticketsSold: s.cap });
 
     const totalCosts = venueHire + compliance + logistics + showCosts + production + mktg + misc + artistShare;
+    const totalCostsSellOut = venueHire + compliance + logistics + showCosts + production + mktg + misc + artistShareSellOut;
     const plForecast = forecastRev - totalCosts;
-    const plSellOut = sellOutRev - totalCosts;
+    const plSellOut = sellOutRev - totalCostsSellOut;
 
     // Live current revenue from Ticket Counts
     const liveData = getLiveNetRevenue(s, i);
     const liveRev = liveData.total;
     const plLive = liveRev > 0 ? liveRev - totalCosts : null; // null = no data yet
 
-    return { forecastRev, sellOutRev, liveRev, plLive, liveData, venueHire, compliance, logistics, showCosts, production, mktg, misc, artistShare, totalCosts, plForecast, plSellOut };
+    return { forecastRev, sellOutRev, liveRev, plLive, liveData, venueHire, compliance, logistics, showCosts, production, mktg, misc, artistShare, artistShareSellOut, totalCosts, totalCostsSellOut, plForecast, plSellOut, activeDeal };
   };
 
   const calcs = showData.map((s, i) => showCalc(s, i));
@@ -2843,6 +3257,93 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
               );
             })()}
 
+            {/* DEAL OVERRIDE — per show */}
+            <Section title="🤝 Artist Deal (this show)">
+              <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:12, color:C.muted, marginBottom:8 }}>
+                <input type="checkbox" checked={!!s.dealOverride}
+                  onChange={e => updShow(activeCard, "dealOverride", e.target.checked)}
+                  style={{ accentColor: C.accent }} />
+                Override tour deal for this show
+              </label>
+              {s.dealOverride ? (
+                <DealBuilder
+                  deal={s.showDeal || BLANK_DEAL}
+                  onChange={d => updShow(activeCard, "showDeal", d)}
+                  fx={fx} compact />
+              ) : (
+                <div style={{ background:C.bg, borderRadius:6, padding:"10px 12px", fontSize:12, color:C.muted }}>
+                  Using tour deal: <strong style={{color:C.accent}}>{artist?.deal?.type || "Flat Guarantee"}</strong>
+                  {artist?.deal?.guarantee > 0 && <span> — {artist.deal.currency} {fmtN(artist.deal.guarantee)}</span>}
+                  {(artist?.deal?.pct > 0 && artist?.deal?.type !== "Flat Guarantee") && <span> — {artist.deal.pct}% of net</span>}
+                </div>
+              )}
+              {/* Payout breakdown */}
+              {(() => {
+                const d = s.dealOverride && s.showDeal ? s.showDeal : (artist?.deal || BLANK_DEAL);
+                const gAUD = d.currency === "AUD" ? (d.guarantee||0) : (d.guarantee||0) * (fx[d.currency]||1);
+                const expLabels = [];
+                if (d.expenses?.venueHire)  expLabels.push("venue hire");
+                if (d.expenses?.production) expLabels.push("production");
+                if (d.expenses?.marketing)  expLabels.push("marketing");
+                if (d.expenses?.showCosts)  expLabels.push("all show costs");
+                return (
+                  <div style={{ marginTop:8, background:C.bg, borderRadius:6, padding:"10px 12px", fontSize:12 }}>
+                    {d.type === "Flat Guarantee" && (
+                      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                        <span style={{ color:C.muted }}>Fixed guarantee</span>
+                        <span style={{ color:C.accent, fontWeight:700 }}>{fmt(gAUD)} AUD</span>
+                      </div>
+                    )}
+                    {d.type === "VS Deal" && (
+                      <>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                          <span style={{ color:C.muted }}>Guarantee floor</span>
+                          <span style={{ color:C.text }}>{fmt(gAUD)}</span>
+                        </div>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                          <span style={{ color:C.muted }}>{d.pct||70}% of net{expLabels.length ? " after " + expLabels.join(", ") : ""}</span>
+                          <span style={{ color:C.yellow }}>{fmt(c.forecastRev * ((d.pct||70)/100))}</span>
+                        </div>
+                        <div style={{ display:"flex", justifyContent:"space-between", borderTop:`1px solid ${C.border}`, paddingTop:4 }}>
+                          <span style={{ color:C.muted, fontWeight:700 }}>Artist takes (higher of)</span>
+                          <span style={{ color:C.accent, fontWeight:800, fontSize:14 }}>{fmt(c.artistShare)}</span>
+                        </div>
+                      </>
+                    )}
+                    {(d.type === "Straight %" || d.type === "Door Deal") && (
+                      <>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                          <span style={{ color:C.muted }}>{d.pct||70}% of net{expLabels.length ? " after " + expLabels.join(", ") : ""}</span>
+                          <span style={{ color:C.muted }}>Forecast net: {fmt(c.forecastRev)}</span>
+                        </div>
+                        <div style={{ display:"flex", justifyContent:"space-between", borderTop:`1px solid ${C.border}`, paddingTop:4 }}>
+                          <span style={{ color:C.muted, fontWeight:700 }}>Artist payout (forecast)</span>
+                          <span style={{ color:C.accent, fontWeight:800, fontSize:14 }}>{fmt(c.artistShare)}</span>
+                        </div>
+                      </>
+                    )}
+                    {(d.type === "Stepped %" || d.type === "Stepped $") && (
+                      <>
+                        <div style={{ color:C.muted, marginBottom:4 }}>
+                          {d.type === "Stepped %" ? "Stepped % — tier based on tickets sold" : "Stepped $ — tier based on revenue"}
+                        </div>
+                        {[...(d.steps||[])].sort((a,b)=>a.threshold-b.threshold).map((step,i) => (
+                          <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"2px 0", fontSize:11, color:C.muted }}>
+                            <span>{d.type==="Stepped %" ? `${step.threshold.toLocaleString()}+ tickets` : `${fmt(step.threshold)}+`}</span>
+                            <span style={{ color:C.green }}>{step.value}{d.type==="Stepped %"?"%":"$"}</span>
+                          </div>
+                        ))}
+                        <div style={{ display:"flex", justifyContent:"space-between", borderTop:`1px solid ${C.border}`, paddingTop:4, marginTop:4 }}>
+                          <span style={{ color:C.muted, fontWeight:700 }}>Artist payout (forecast)</span>
+                          <span style={{ color:C.accent, fontWeight:800, fontSize:14 }}>{fmt(c.artistShare)}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+            </Section>
+
             {/* P&L CARD */}
             {(() => {
               const liveRevData = getLiveNetRevenue(s, activeCard);
@@ -2851,7 +3352,6 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
               return (
                 <div style={{ background: C.panel, borderRadius: 10, padding: "16px", border: `2px solid ${borderCol}` }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.textDim, textTransform: "uppercase", marginBottom: 12 }}>Show P&L</div>
-                  {/* Live P&L — top row if data exists */}
                   {hasLive && (
                     <div style={{ background: C.bg, borderRadius:8, padding:"10px 14px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                       <div>
@@ -2865,7 +3365,8 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                   )}
                   {[
                     ["Forecast Revenue", c.forecastRev, C.yellow],
-                    ["Total Show Costs", c.totalCosts, C.red],
+                    ["Artist Payout", c.artistShare, C.accent],
+                    ["Total Show Costs (inc. artist)", c.totalCosts, C.red],
                   ].map(([lbl,val,col])=>(
                     <div key={lbl} style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"5px 0", borderBottom:`1px solid ${C.border}` }}>
                       <span style={{color:C.muted}}>{lbl}</span>
@@ -2881,7 +3382,8 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                     <span style={{color: c.plSellOut>=0?C.green:C.red, fontWeight:700}}>{fmt(c.plSellOut)}</span>
                   </div>
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 8, fontStyle: "italic" }}>
-                    Includes allocated share of: artist fee, intl flights, marketing, contingency, passes
+                    Deal: {c.activeDeal?.type || "Flat Guarantee"}{c.activeDeal?.guarantee > 0 ? ` — ${c.activeDeal.currency} ${fmtN(c.activeDeal.guarantee)}` : ""}
+                    {c.activeDeal?.pct > 0 && c.activeDeal?.type !== "Flat Guarantee" ? ` / ${c.activeDeal.pct}% of net` : ""}
                   </div>
                 </div>
               );
