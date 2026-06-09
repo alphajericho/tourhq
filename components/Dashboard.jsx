@@ -145,6 +145,11 @@ function Label({ children }) {
   return <div style={{ fontSize: 11, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{children}</div>;
 }
 function Input({ label, value, onChange, type = "number", prefix, style = {} }) {
+  const [localVal, setLocalVal] = React.useState(value === 0 || value === null || value === undefined ? "" : String(value));
+  React.useEffect(() => {
+    // Sync from parent only when not focused
+    setLocalVal(value === 0 || value === null || value === undefined ? "" : String(value));
+  }, [value]);
   return (
     <div style={{ marginBottom: 12, ...style }}>
       {label && <Label>{label}</Label>}
@@ -152,8 +157,22 @@ function Input({ label, value, onChange, type = "number", prefix, style = {} }) 
         {prefix && <span style={{ padding: "0 8px", color: C.muted, fontSize: 13 }}>{prefix}</span>}
         <input
           type={type}
-          value={value}
-          onChange={e => onChange(type === "number" ? parseFloat(e.target.value) || 0 : e.target.value)}
+          value={localVal}
+          placeholder="0"
+          onChange={e => {
+            setLocalVal(e.target.value);
+            if (type === "number") {
+              const parsed = parseFloat(e.target.value);
+              onChange(isNaN(parsed) ? 0 : parsed);
+            } else {
+              onChange(e.target.value);
+            }
+          }}
+          onBlur={() => {
+            if (type === "number" && localVal === "") {
+              onChange(0);
+            }
+          }}
           style={{ background: "transparent", border: "none", outline: "none", color: C.text, padding: "8px 10px", width: "100%", fontSize: 14 }}
         />
       </div>
@@ -560,23 +579,23 @@ function ShowRow({ show, idx, onChange, onRemove, venues, onAddVenue }) {
         </div>
         <div>
           <Label>Capacity</Label>
-          <input type="number" value={show.cap} onChange={e => onChange(idx, { ...show, cap: +e.target.value })} style={iS} />
+          <input type="number" value={show.cap || ""} onChange={e => onChange(idx, { ...show, cap: +e.target.value })} style={iS} />
         </div>
         <div>
           <Label>Ticket Price (gross)</Label>
-          <input type="number" value={show.ticketPrice} onChange={e => onChange(idx, { ...show, ticketPrice: +e.target.value })} style={iS} />
+          <input type="number" value={show.ticketPrice || ""} onChange={e => onChange(idx, { ...show, ticketPrice: +e.target.value })} style={iS} />
         </div>
         <div>
           <Label>Flat Hire ($)</Label>
-          <input type="number" value={show.flatHire ?? 0} onChange={e => onChange(idx, { ...show, flatHire: +e.target.value })} style={iS} placeholder="0" />
+          <input type="number" value={show.flatHire || ""} onChange={e => onChange(idx, { ...show, flatHire: +e.target.value })} style={iS} placeholder="0" />
         </div>
         <div>
           <Label>Per Head ($)</Label>
-          <input type="number" step="0.5" value={show.perHead ?? 5.5} onChange={e => onChange(idx, { ...show, perHead: +e.target.value })} style={iS} placeholder="5.50" />
+          <input type="number" step="0.5" value={show.perHead || ""} onChange={e => onChange(idx, { ...show, perHead: +e.target.value })} style={iS} placeholder="5.50" />
         </div>
         <div>
           <Label>Forecast Attend %</Label>
-          <input type="number" value={Math.round(show.attendPct * 100)} onChange={e => onChange(idx, { ...show, attendPct: (+e.target.value) / 100 })} style={iS} />
+          <input type="number" value={show.attendPct ? Math.round(show.attendPct * 100) : ""} onChange={e => onChange(idx, { ...show, attendPct: (+e.target.value) / 100 })} style={iS} />
         </div>
         <div style={{ gridColumn: "2 / 4" }}>
           <Label>Notes (optional)</Label>
@@ -1094,7 +1113,7 @@ export default function App() {
           {["USD","GBP","EUR"].map(cur => (
             <div key={cur} style={{ display:"flex", alignItems:"center", gap:6 }}>
               <span style={{ fontSize:11, color:C.muted }}>{cur}/AUD</span>
-              <input type="number" step="0.01" value={fx[cur]}
+              <input type="number" step="0.01" value={fx[cur] || ""}
                 onChange={e => setFx(f => ({...f, [cur]: +e.target.value}))}
                 style={{ width:60, background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 6px", fontSize:12 }} />
             </div>
@@ -1283,6 +1302,11 @@ export default function App() {
                   <Input label="Pax" value={p.domPax} onChange={v => setParty(x=>({...x,domPax:v}))} />
                   <Input label="Avg Cost/Leg/Pax" value={p.domCostPerLeg} onChange={v => setParty(x=>({...x,domCostPerLeg:v}))} prefix="$" />
                 </div>
+                <div style={{ marginTop: 10, padding: "8px 10px", background: C.bg, borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, color: C.muted }}>Intl flights: <strong style={{color:C.text}}>{fmt(costs.intlFlights)}</strong></span>
+                  <span style={{ fontSize: 12, color: C.muted }}>Dom flights: <strong style={{color:C.text}}>{fmt(costs.domFlights)}</strong></span>
+                  <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>Total: <strong style={{color:C.accent}}>{fmt(costs.intlFlights + costs.domFlights)}</strong></span>
+                </div>
               </Section>
 
               {/* ACCOM */}
@@ -1313,6 +1337,12 @@ export default function App() {
                   <Input label="Drivers" value={p.drivers} onChange={v => setParty(x=>({...x,drivers:v}))} />
                   <Input label="Days" value={p.driverDays} onChange={v => setParty(x=>({...x,driverDays:v}))} />
                   <Input label="Day Rate" value={p.driverRate} onChange={v => setParty(x=>({...x,driverRate:v}))} prefix="$" />
+                </div>
+                <div style={{ marginTop: 10, padding: "8px 10px", background: C.bg, borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, color: C.muted }}>Sprinter: <strong style={{color:C.text}}>{fmt(costs.sprinter)}</strong></span>
+                  <span style={{ fontSize: 12, color: C.muted }}>Van: <strong style={{color:C.text}}>{fmt(costs.van)}</strong></span>
+                  <span style={{ fontSize: 12, color: C.muted }}>Drivers: <strong style={{color:C.text}}>{fmt(costs.drivers)}</strong></span>
+                  <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>Total: <strong style={{color:C.accent}}>{fmt(costs.sprinter + costs.van + costs.drivers)}</strong></span>
                 </div>
               </Section>
             </div>
@@ -1471,7 +1501,7 @@ export default function App() {
                     <Label>Research: Avg overseas gross per show ({artist.dealCurrency})</Label>
                     <div style={{ display: "flex", alignItems: "center", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
                       <span style={{ padding: "0 8px", color: C.muted, fontSize: 13 }}>{artist.dealCurrency}</span>
-                      <input type="number" value={researchOverseasGross}
+                      <input type="number" value={researchOverseasGross || ""}
                         onChange={e => setResearchOverseasGross(+e.target.value)}
                         style={{ background: "transparent", border: "none", outline: "none", color: C.text, padding: "8px 10px", width: "100%", fontSize: 14 }} />
                     </div>
@@ -2468,7 +2498,7 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
               </div>
               <div>
                 <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Forecast %</div>
-                <input type="number" value={Math.round((t.forecast||0.6)*100)} onChange={e => updType(t.id, "forecast", (+e.target.value)/100)}
+                <input type="number" value={t.forecast ? Math.round(t.forecast*100) : ""} onChange={e => updType(t.id, "forecast", (+e.target.value)/100)}
                   style={iS} />
                 {t.allocation > 0 && <div style={{ fontSize:10, color:C.yellow, marginTop:2 }}>= {Math.round(t.allocation * (t.forecast||0.6)).toLocaleString()} tickets</div>}
               </div>
@@ -2962,7 +2992,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                   <CalendarPicker value={s.date} onChange={v => updShow(activeCard,"date",v)} /></div>
                 <div>
                   <Label>Capacity</Label>
-                  <input type="number" value={s.cap} onChange={e => updShow(activeCard,"cap",+e.target.value)} style={iS} />
+                  <input type="number" value={s.cap || ""} onChange={e => updShow(activeCard,"cap",+e.target.value)} style={iS} placeholder="0" />
                   {s.venue && VENUE_DB.find(v => v.name === s.venue) && (
                     <div style={{ fontSize:10, color:C.muted, marginTop:2, fontStyle:"italic" }}>Auto-filled from venue database</div>
                   )}
@@ -3001,7 +3031,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                         </div>
                         <div>
                           <Label>Forecast %</Label>
-                          <input type="number" value={Math.round(fc*100)} onChange={e => updShow(activeCard, fcKey, (+e.target.value)/100)} style={iS} />
+                          <input type="number" value={fc ? Math.round(fc*100) : ""} onChange={e => updShow(activeCard, fcKey, (+e.target.value)/100)} style={iS} placeholder="0" />
                           {alloc > 0 && <div style={{ fontSize:10, color:C.yellow, marginTop:2 }}>= {Math.round(alloc*fc).toLocaleString()} tickets</div>}
                         </div>
                       </div>
