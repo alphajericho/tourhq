@@ -461,11 +461,17 @@ function DealBuilder({ deal, onChange, fx, compact }) {
 
 // ─── DEAL CALCULATOR ──────────────────────────────────────────────────────
 // Given a deal and show financials, returns what the artist gets
-function calcArtistPayout(deal, grossBoxOffice, costs) {
+function calcArtistPayout(deal, grossBoxOffice, costs, fx) {
   if (!deal) return 0;
   const d = deal;
   const ticketingFees = grossBoxOffice * 0.1; // ~10% ticketing + GST
   const netBoxOffice = Math.max(0, grossBoxOffice - ticketingFees);
+
+  // Convert guarantee to AUD using fx rates
+  const fxRates = fx || {};
+  const guaranteeAUD = d.currency === "AUD"
+    ? (d.guarantee || 0)
+    : (d.guarantee || 0) * (fxRates[d.currency] || 1);
 
   // Build agreed expenses deduction
   const expDeductions =
@@ -478,12 +484,11 @@ function calcArtistPayout(deal, grossBoxOffice, costs) {
 
   switch (d.type) {
     case "Flat Guarantee":
-      return d.guarantee || 0;
+      return guaranteeAUD;
 
     case "VS Deal": {
-      const guar = d.guarantee || 0;
       const pctAmt = netAfterExpenses * ((d.pct || 70) / 100);
-      return Math.max(guar, pctAmt);
+      return Math.max(guaranteeAUD, pctAmt);
     }
 
     case "Straight %":
@@ -1197,23 +1202,55 @@ export default function App() {
                     <div style={{ background: C.bg, borderRadius: 6, padding: "12px 14px", border: `1px solid ${C.border}`, marginTop: 8, fontSize: 12 }}>
                       <div style={{ fontWeight: 700, color: C.accent, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Deal Summary</div>
                       {d.type === "Flat Guarantee" && (
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ color: C.muted }}>Fixed fee — paid regardless of ticket sales</span>
-                          <span style={{ color: C.accent, fontWeight: 700, fontSize: 15 }}>{fmt(gAUD)} AUD</span>
-                        </div>
+                        <>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ color: C.muted }}>Fixed fee — paid regardless of ticket sales</span>
+                            <span style={{ color: C.muted, fontSize: 11 }}>{d.currency !== "AUD" ? `${d.currency} ${fmtN(d.guarantee||0)}` : ""}</span>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 4 }}>
+                            <div style={{ background: C.panel, borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
+                              <div style={{ fontSize: 10, color: C.muted, marginBottom: 3, textTransform: "uppercase" }}>Fee (AUD)</div>
+                              <div style={{ fontSize: 16, fontWeight: 800, color: C.accent }}>{fmt(gAUD)}</div>
+                            </div>
+                            <div style={{ background: C.panel, borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
+                              <div style={{ fontSize: 10, color: C.muted, marginBottom: 3, textTransform: "uppercase" }}>Shows</div>
+                              <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{numShows}</div>
+                            </div>
+                            <div style={{ background: C.panel, borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
+                              <div style={{ fontSize: 10, color: C.muted, marginBottom: 3, textTransform: "uppercase" }}>Per Show</div>
+                              <div style={{ fontSize: 16, fontWeight: 800, color: C.yellow }}>{numShows > 0 ? fmt(gAUD / numShows) : "—"}</div>
+                            </div>
+                          </div>
+                          {d.currency !== "AUD" && (
+                            <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>
+                              {d.currency} {fmtN(d.guarantee||0)} × {fx[d.currency] || 1} = {fmt(gAUD)} AUD
+                            </div>
+                          )}
+                        </>
                       )}
                       {d.type === "VS Deal" && (
                         <>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                            <span style={{ color: C.muted }}>Guarantee (minimum)</span>
-                            <span style={{ color: C.text, fontWeight: 600 }}>{d.currency} {fmtN(d.guarantee||0)} = {fmt(gAUD)} AUD</span>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+                            <div style={{ background: C.panel, borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
+                              <div style={{ fontSize: 10, color: C.muted, marginBottom: 3, textTransform: "uppercase" }}>Guarantee (AUD)</div>
+                              <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{fmt(gAUD)}</div>
+                              {d.currency !== "AUD" && <div style={{ fontSize: 10, color: C.muted }}>{d.currency} {fmtN(d.guarantee||0)}</div>}
+                            </div>
+                            <div style={{ background: C.panel, borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
+                              <div style={{ fontSize: 10, color: C.muted, marginBottom: 3, textTransform: "uppercase" }}>Shows</div>
+                              <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{numShows}</div>
+                            </div>
+                            <div style={{ background: C.panel, borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
+                              <div style={{ fontSize: 10, color: C.muted, marginBottom: 3, textTransform: "uppercase" }}>Per Show</div>
+                              <div style={{ fontSize: 15, fontWeight: 800, color: C.yellow }}>{numShows > 0 ? fmt(gAUD / numShows) : "—"}</div>
+                            </div>
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                             <span style={{ color: C.muted }}>VS: {d.pct||70}% of net{expLabels.length ? " after " + expLabels.join(", ") : ""}</span>
-                            <span style={{ color: C.yellow, fontWeight: 600 }}>whichever is higher</span>
+                            <span style={{ color: C.yellow, fontWeight: 600 }}>artist takes higher</span>
                           </div>
-                          <div style={{ fontSize: 11, color: C.muted, marginTop: 4, fontStyle: "italic" }}>
-                            Artist earns: MAX(guarantee, {d.pct||70}% × net box office{expLabels.length ? " − " + expLabels.join(" − ") : ""})
+                          <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic" }}>
+                            MAX(guarantee {fmt(gAUD)}, {d.pct||70}% × net box office{expLabels.length ? " − " + expLabels.join(" − ") : ""})
                           </div>
                         </>
                       )}
@@ -1461,7 +1498,7 @@ export default function App() {
                       totalCosts: totalOpEx,
                       ticketsSold,
                     };
-                    const artistPayout = calcArtistPayout(artistDeal, rev, estCosts);
+                    const artistPayout = calcArtistPayout(artistDeal, rev, estCosts, fx);
                     const promoterPL = afterOpEx - artistPayout;
                     return (
                       <div key={sp} style={{
@@ -2781,8 +2818,8 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
     const activeDeal = s.dealOverride && s.showDeal ? s.showDeal : (artist?.deal || BLANK_DEAL);
     const liveData0 = getLiveNetRevenue(s, i);
     const costsForDeal = { venueHire, production, mktg, totalCosts: venueHire + compliance + logistics + showCosts + production + mktg + misc, ticketsSold: getLiveSold(i) };
-    const artistShare = calcArtistPayout(activeDeal, forecastRev, costsForDeal);
-    const artistShareSellOut = calcArtistPayout(activeDeal, sellOutRev, { ...costsForDeal, ticketsSold: s.cap });
+    const artistShare = calcArtistPayout(activeDeal, forecastRev, costsForDeal, fx);
+    const artistShareSellOut = calcArtistPayout(activeDeal, sellOutRev, { ...costsForDeal, ticketsSold: s.cap }, fx);
 
     const totalCosts = venueHire + compliance + logistics + showCosts + production + mktg + misc + artistShare;
     const totalCostsSellOut = venueHire + compliance + logistics + showCosts + production + mktg + misc + artistShareSellOut;
