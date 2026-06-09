@@ -880,6 +880,40 @@ export default function App() {
     VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i }))
   );
 
+  // Sync Estimator shows → showData when Estimator data changes
+  // Pushes: city, venue, cap, venueFlat, venuePerHead, catAPrice, notes
+  // Does NOT overwrite costs or other fields the user has set in Show by Show
+  useEffect(() => {
+    if (!shows.length) return;
+    setShowData(prev => {
+      // Grow or shrink to match shows length
+      const next = shows.map((s, i) => {
+        const existing = prev[i] || blankSBShow(s);
+        return {
+          ...existing,
+          // Always sync these identity fields from Estimator
+          city: s.city || existing.city || "",
+          venue: s.venueName || existing.venue || "",
+          cap: s.cap || existing.cap || 0,
+          // Sync pricing from Estimator only if SBS hasn't been set yet
+          catAPrice: existing.catAPrice || s.ticketPrice || 0,
+          catACap: existing.catACap || s.cap || 0,
+          catAForecast: existing.catAForecast || s.attendPct || 0.6,
+          // Sync venue hire from Estimator
+          venueFlat: existing.venueFlat || s.flatHire || 0,
+          venuePerHead: existing.venuePerHead !== 5.5 ? existing.venuePerHead : (s.perHead || 5.5),
+          // Sync notes only if SBS notes are blank
+          notes: existing.notes || s.notes || "",
+        };
+      });
+      return next;
+    });
+  }, [JSON.stringify(shows.map(s => ({
+    city: s.city, venueName: s.venueName, cap: s.cap,
+    ticketPrice: s.ticketPrice, flatHire: s.flatHire,
+    perHead: s.perHead, attendPct: s.attendPct, notes: s.notes
+  })))]);
+
   // Keep ticketingRecords in sync with showData (Show by Show is the source of truth)
   // Falls back to estimator shows if showData is empty
   // Placed here so all dependencies (showData, shows) are already declared above
