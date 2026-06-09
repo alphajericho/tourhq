@@ -779,19 +779,25 @@ export default function App() {
 
   const confirmNewTour = async () => {
     if (!pendingName.trim()) return;
-    resetTourData();
-    setTourName(pendingName.trim());
     setShowNameModal(false);
-    // Create the tour record immediately so autosave has an ID to work with
     setSaving(true);
-    const payload = { artist: { name: "", agent: "", status: "IN CONSIDERATION", deal: { ...BLANK_DEAL } }, shows: [defaultShow()], party: {}, fx, ticketTypes: [{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 }], vipPackageCost: { poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 }, ticketingRecords: [blankTicketRecord()], showData: [blankSBShow()], national: { intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0, artistFeeCurrency: 'USD' }, vipItems: [{ label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 }], deposits: [], venues: VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i })) };
+    const blankPayload = { artist: { name: "", agent: "", status: "IN CONSIDERATION", deal: { ...BLANK_DEAL } }, shows: [defaultShow()], party: {}, fx, ticketTypes: [{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 }], vipPackageCost: { poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 }, ticketingRecords: [blankTicketRecord()], showData: [blankSBShow()], national: { intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0, artistFeeCurrency: 'USD' }, vipItems: [{ label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 }], deposits: [], venues: VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i })) };
     try {
+      // Create DB record FIRST — then reset UI state so activeTourId is set before user starts typing
       const res = await fetch('/api/tours', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: pendingName.trim(), artist_name: "", status: "IN CONSIDERATION", payload }) });
+        body: JSON.stringify({ name: pendingName.trim(), artist_name: "", status: "IN CONSIDERATION", payload: blankPayload }) });
       const { tour } = await res.json();
-      if (tour) setActiveTourId(tour.id);
+      // Now reset state — activeTourId will be set immediately after
+      resetTourData();
+      setTourName(pendingName.trim());
+      if (tour?.id) setActiveTourId(tour.id);
       loadTourList();
-    } catch (e) {}
+      setSaveMsg("✅ Tour created");
+      setTimeout(() => setSaveMsg(""), 3000);
+    } catch (e) {
+      setSaveMsg("❌ Failed to create tour — check connection");
+      setTimeout(() => setSaveMsg(""), 4000);
+    }
     setSaving(false);
   };
 
@@ -1098,7 +1104,10 @@ export default function App() {
           {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith("✅") ? C.green : C.red }}>{saveMsg}</span>}
           {!saveMsg && autoSaveStatus === "saving" && <span style={{ fontSize: 11, color: C.muted }}>⟳ Autosaving…</span>}
           {!saveMsg && autoSaveStatus === "saved" && <span style={{ fontSize: 11, color: C.green }}>✓ Autosaved</span>}
-          {!saveMsg && autoSaveStatus === "error" && <span style={{ fontSize: 11, color: C.red }}>⚠ Autosave failed</span>}
+          {!saveMsg && autoSaveStatus === "error" && <span style={{ fontSize: 11, color: C.red, fontWeight:700 }}>⚠ Autosave failed — click Save manually</span>}
+          {!saveMsg && !autoSaveStatus && !activeTourId && (
+            <span style={{ fontSize: 11, color: C.yellow, fontWeight: 700 }}>⚠ Not saved yet — click 💾 Save</span>
+          )}
         </div>
 
         {/* FX STRIP */}
