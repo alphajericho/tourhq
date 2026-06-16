@@ -526,6 +526,8 @@ function calcArtistPayout(deal, grossBoxOffice, costs, fx) {
 // ─── SHOW ROW for budget ───────────────────────────────────────────────────
 function ShowRow({ show, idx, onChange, onRemove, venues, onAddVenue }) {
   const [showCustomForm, setShowCustomForm] = useState(false);
+  const [showCustomCity, setShowCustomCity] = useState(false);
+  const [customCityName, setCustomCityName] = useState("");
   const [customVenue, setCustomVenue] = useState({ name:"", cap:0, dealType:"flat", hire:0, perHead:5.5, notes:"" });
 
   const venuesForCity = venues.filter(v => v.city === show.city);
@@ -571,9 +573,31 @@ function ShowRow({ show, idx, onChange, onRemove, venues, onAddVenue }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
         <div>
           <Label>City</Label>
-          <select value={show.city} onChange={e => handleCity(e.target.value)} style={iS}>
+          <select value={show.city} onChange={e => {
+            if (e.target.value === "__newcity__") { setShowCustomCity(true); }
+            else { setShowCustomCity(false); handleCity(e.target.value); }
+          }} style={iS}>
             {allCities.map(c => <option key={c}>{c}</option>)}
+            <option value="__newcity__">+ New City…</option>
           </select>
+          {showCustomCity && (
+            <div style={{ display:"flex", gap:4, marginTop:4 }}>
+              <input value={customCityName} onChange={e => setCustomCityName(e.target.value)}
+                placeholder="e.g. Canberra"
+                style={{ ...iS, flex:1 }} />
+              <button onClick={() => {
+                if (!customCityName.trim()) return;
+                const newV = { ...BLANK_VENUE, city: customCityName.trim(), name: "TBC", cap: 0, hire: 0, perHead: 5.5, state: "OTHER", dealType: "flat", production:0, notes:"", customCity:"", _id: Date.now() };
+                onAddVenue(newV);
+                handleCity(customCityName.trim());
+                setCustomCityName("");
+                setShowCustomCity(false);
+              }}
+              style={{ background:C.green, border:"none", borderRadius:6, color:"#fff", padding:"7px 12px", cursor:"pointer", fontWeight:700, fontSize:12 }}>
+                Add
+              </button>
+            </div>
+          )}
         </div>
         <div>
           <Label>Venue</Label>
@@ -765,7 +789,7 @@ export default function App() {
     setActiveTourId(null);
     setArtist({ name: "", agent: "", status: "IN CONSIDERATION", deal: { ...BLANK_DEAL } });
     setShows([defaultShow()]);
-    setParty({ band: 4, crew: 2, local: 3, intlFlightCost: 0, intlFlightPax: 0, domLegs: 0, domCostPerLeg: 350, domPax: 0, accomNights: 0, accomRooms: 0, accomRate: 180, sprinterLegs: 0, sprinterCost: 500, vanDays: 0, vans: 1, vanRate: 150, drivers: 0, driverDays: 0, driverRate: 350, perDiemPax: 0, pdRate: 75, pdShows: 0, catering: 0, cateringShows: 0, visaPax: 0, visaFee: 420, union: 150, tourMgrRate: 600, tourMgrDays: 0, stagehandShows: 0, stagehandRate: 440, supportStaff: 0, supportRate: 450, supports: 0, supportFee: 400, backlineShows: 0, backlineCost: 2200, lightingShows: 0, lightingRate: 550, marketing: 500, publicist: 1500, creative: 1000, contingency: 5000, passes: 350 });
+    setParty({ band: 4, crew: 2, local: 3, intlFlightCost: 0, intlFlightPax: 0, domLegs: 0, domCostPerLeg: 350, domPax: 0, accomNights: 0, accomRooms: 0, accomRate: 180, sprinterLegs: 0, sprinterCost: 500, vanDays: 0, vans: 1, vanRate: 150, drivers: 0, driverDays: 0, driverRate: 350, perDiemPax: 0, pdRate: 75, pdShows: 0, catering: 0, cateringShows: 0, riderShows: 0, riderCost: 0, visaPax: 0, visaFee: 420, union: 150, tourMgrRate: 600, tourMgrDays: 0, stagehandShows: 0, stagehandRate: 440, supportStaff: 0, supportRate: 450, supports: 0, supportFee: 400, backlineShows: 0, backlineCost: 2200, lightingShows: 0, lightingRate: 550, fohShows: 0, fohRate: 500, additionalProd: [], marketing: 500, publicist: 1500, creative: 1000, contingency: 5000, passes: 350 });
     setTicketTypes([{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 }]);
     setVipPackageCost({ poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 });
     setTicketingRecords([blankTicketRecord()]);
@@ -946,7 +970,7 @@ export default function App() {
   const [vipPackageCost, setVipPackageCost] = useState({ poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 });
 
   // ── TOUR PARTY ──
-  const [party, setParty] = useState({ band: 4, crew: 2, local: 3, intlFlightCost: 0, intlFlightPax: 0, domLegs: 0, domCostPerLeg: 350, domPax: 0, accomNights: 0, accomRooms: 0, accomRate: 180, sprinterLegs: 0, sprinterCost: 500, vanDays: 0, vans: 1, vanRate: 150, drivers: 0, driverDays: 0, driverRate: 350, perDiemPax: 0, pdRate: 75, pdShows: 0, catering: 0, cateringShows: 0, visaPax: 0, visaFee: 420, union: 150, tourMgrRate: 600, tourMgrDays: 0, stagehandShows: 0, stagehandRate: 440, supportStaff: 0, supportRate: 450, supports: 0, supportFee: 400, backlineShows: 0, backlineCost: 2200, lightingShows: 0, lightingRate: 550, marketing: 500, publicist: 1500, creative: 1000, contingency: 5000, passes: 350 });
+  const [party, setParty] = useState({ band: 4, crew: 2, local: 3, intlFlightCost: 0, intlFlightPax: 0, domLegs: 0, domCostPerLeg: 350, domPax: 0, accomNights: 0, accomRooms: 0, accomRate: 180, sprinterLegs: 0, sprinterCost: 500, vanDays: 0, vans: 1, vanRate: 150, drivers: 0, driverDays: 0, driverRate: 350, perDiemPax: 0, pdRate: 75, pdShows: 0, catering: 0, cateringShows: 0, riderShows: 0, riderCost: 0, visaPax: 0, visaFee: 420, union: 150, tourMgrRate: 600, tourMgrDays: 0, stagehandShows: 0, stagehandRate: 440, supportStaff: 0, supportRate: 450, supports: 0, supportFee: 400, backlineShows: 0, backlineCost: 2200, lightingShows: 0, lightingRate: 550, fohShows: 0, fohRate: 500, additionalProd: [], marketing: 500, publicist: 1500, creative: 1000, contingency: 5000, passes: 350 });
   const p = party;
 
   // ── ARTIST DEAL ──
@@ -987,12 +1011,15 @@ export default function App() {
     drivers: p.driverDays * p.drivers * p.driverRate,
     perDiem: p.perDiemPax * p.pdRate * p.pdShows,
     catering: p.catering * p.cateringShows,
+    rider: (p.riderCost || 0) * (p.riderShows || 0),
     tourMgr: p.tourMgrDays * p.tourMgrRate,
     stagehand: p.stagehandShows * p.stagehandRate,
     supportStaff: p.supportStaff * p.supportRate * numShows,
     supports: p.supports * p.supportFee * numShows,
     backline: p.backlineShows * p.backlineCost,
     lighting: p.lightingShows * p.lightingRate,
+    foh: (p.fohShows || 0) * (p.fohRate || 0),
+    additionalProd: (p.additionalProd || []).reduce((a, x) => a + (+x.cost || 0), 0),
     marketing: p.marketing + p.publicist + p.creative,
     contingency: p.contingency,
     passes: p.passes,
@@ -1002,8 +1029,8 @@ export default function App() {
   costs.visa = 0; // rolled into compliance
 
   const totalLogistics = costs.intlFlights + costs.domFlights + costs.accom + costs.sprinter + costs.van + costs.drivers;
-  const totalShowCosts = costs.perDiem + costs.catering + costs.tourMgr + costs.stagehand + costs.supportStaff + costs.supports + costs.passes;
-  const totalProduction = costs.backline + costs.lighting;
+  const totalShowCosts = costs.perDiem + costs.catering + costs.rider + costs.tourMgr + costs.stagehand + costs.supportStaff + costs.supports + costs.passes;
+  const totalProduction = costs.backline + costs.lighting + costs.foh + costs.additionalProd;
   const totalMarketing = costs.marketing;
   const totalMisc = costs.contingency;
   const totalOpEx = totalVenueHire + costs.compliance + totalLogistics + totalShowCosts + totalProduction + totalMarketing + totalMisc;
@@ -1431,12 +1458,25 @@ export default function App() {
             <div>
               {/* COMPLIANCE */}
               <Section title="📋 Compliance">
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.textDim, marginBottom: 6 }}>VISAS & PERMITS</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                   <Input label="Visa Pax" value={p.visaPax} onChange={v => setParty(x=>({...x,visaPax:v}))} />
-                  <Input label="Visa Fee" value={p.visaFee} onChange={v => setParty(x=>({...x,visaFee:v}))} prefix="$" />
-                  <Input label="Union Fee" value={p.union} onChange={v => setParty(x=>({...x,union:v}))} prefix="$" />
+                  <Input label="Visa Fee / Pax" value={p.visaFee} onChange={v => setParty(x=>({...x,visaFee:v}))} prefix="$" />
+                  <Input label="Union / Work Permit" value={p.union} onChange={v => setParty(x=>({...x,union:v}))} prefix="$" />
                 </div>
-                <div style={{ fontSize: 12, color: C.muted }}>Visa total: <strong style={{color:C.text}}>{fmt(p.visaPax*(p.visaFee+p.union))}</strong> + APRA 2% on forecast: <strong style={{color:C.text}}>{fmt(apra)}</strong></div>
+                <div style={{ padding: "6px 10px", background: C.bg, borderRadius: 5, marginTop: 6, display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12, color: C.muted }}>Visa subtotal</span>
+                  <strong style={{ fontSize: 12, color: C.text }}>{fmt(p.visaPax * (p.visaFee + p.union))}</strong>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.textDim, marginBottom: 6, marginTop: 10 }}>APRA / PPCA</div>
+                <div style={{ padding: "6px 10px", background: C.bg, borderRadius: 5, display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12, color: C.muted }}>APRA 2% of forecast net box office</span>
+                  <strong style={{ fontSize: 12, color: C.text }}>{fmt(apra)}</strong>
+                </div>
+                <div style={{ marginTop: 8, padding: "8px 10px", background: C.panel, borderRadius: 6, display: "flex", justifyContent: "space-between", borderTop: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Compliance Total</span>
+                  <strong style={{ fontSize: 13, color: C.accent }}>{fmt(costs.compliance)}</strong>
+                </div>
               </Section>
 
               {/* SHOW COSTS */}
@@ -1451,13 +1491,94 @@ export default function App() {
                   <Input label="Support Acts" value={p.supports} onChange={v => setParty(x=>({...x,supports:v}))} />
                   <Input label="Support Fee/Show" value={p.supportFee} onChange={v => setParty(x=>({...x,supportFee:v}))} prefix="$" />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 }}>
-                  <Input label="Per Diem Pax" value={p.perDiemPax} onChange={v => setParty(x=>({...x,perDiemPax:v}))} />
-                  <Input label="PD Rate/Day" value={p.pdRate} onChange={v => setParty(x=>({...x,pdRate:v}))} prefix="$" />
-                  <Input label="PD Show Days" value={p.pdShows} onChange={v => setParty(x=>({...x,pdShows:v}))} />
-                  <Input label="Catering/Show" value={p.catering} onChange={v => setParty(x=>({...x,catering:v}))} prefix="$" />
-                  <Input label="Catering Shows" value={p.cateringShows} onChange={v => setParty(x=>({...x,cateringShows:v}))} />
-                  <Input label="Passes (national)" value={p.passes} onChange={v => setParty(x=>({...x,passes:v}))} prefix="$" />
+
+                {/* Per Diems — 3 fields on one row, pax auto-populated */}
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.textDim, marginTop: 10, marginBottom: 6 }}>PER DIEMS</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                  <div>
+                    <Label>Pax</Label>
+                    <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                      <input type="number" value={p.perDiemPax || ""} placeholder={String(p.band + p.crew)}
+                        onChange={e => setParty(x=>({...x, perDiemPax: +e.target.value || (p.band + p.crew)}))}
+                        style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }} />
+                    </div>
+                    <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>Auto: {p.band + p.crew} intl pax</div>
+                  </div>
+                  <div>
+                    <Label>Rate / Day</Label>
+                    <select value={p.pdRate} onChange={e => setParty(x=>({...x, pdRate: +e.target.value}))}
+                      style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }}>
+                      {[30,40,50,60,70].map(r => <option key={r} value={r}>${r}/day</option>)}
+                      <option value={p.pdRate && ![30,40,50,60,70].includes(p.pdRate) ? p.pdRate : 0}>Custom…</option>
+                    </select>
+                    {![30,40,50,60,70].includes(p.pdRate) && (
+                      <input type="number" value={p.pdRate || ""} placeholder="Custom rate"
+                        onChange={e => setParty(x=>({...x, pdRate: +e.target.value}))}
+                        style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"6px 10px", fontSize:12, width:"100%", marginTop:4 }} />
+                    )}
+                  </div>
+                  <div>
+                    <Label>Show Days</Label>
+                    <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                      <input type="number" value={p.pdShows || ""} placeholder={String(numShows)}
+                        onChange={e => setParty(x=>({...x, pdShows: +e.target.value || numShows}))}
+                        style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }} />
+                    </div>
+                    <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>Auto: {numShows} shows</div>
+                  </div>
+                </div>
+                <div style={{ padding:"5px 10px", background:C.bg, borderRadius:5, marginTop:4, display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ fontSize:11, color:C.muted }}>Per diem total</span>
+                  <strong style={{ fontSize:11, color:C.text }}>{fmt((p.perDiemPax || p.band + p.crew) * p.pdRate * (p.pdShows || numShows))}</strong>
+                </div>
+
+                {/* Catering */}
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.textDim, marginTop: 10, marginBottom: 6 }}>CATERING & RIDERS</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <div>
+                    <Label>Catering / Show</Label>
+                    <input type="number" value={p.catering || ""} placeholder="0"
+                      onChange={e => setParty(x=>({...x, catering: +e.target.value}))}
+                      style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }} />
+                  </div>
+                  <div>
+                    <Label>Shows</Label>
+                    <input type="number" value={p.cateringShows || ""} placeholder={String(numShows)}
+                      onChange={e => setParty(x=>({...x, cateringShows: +e.target.value}))}
+                      style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }} />
+                  </div>
+                  <div>
+                    <Label>Hospitality Rider / Show</Label>
+                    <input type="number" value={p.riderCost || ""} placeholder="0"
+                      onChange={e => setParty(x=>({...x, riderCost: +e.target.value}))}
+                      style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }} />
+                  </div>
+                  <div>
+                    <Label>Shows</Label>
+                    <input type="number" value={p.riderShows || ""} placeholder={String(numShows)}
+                      onChange={e => setParty(x=>({...x, riderShows: +e.target.value}))}
+                      style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }} />
+                  </div>
+                </div>
+                <div style={{ padding:"5px 10px", background:C.bg, borderRadius:5, marginTop:4, display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ fontSize:11, color:C.muted }}>Catering: {fmt(p.catering * (p.cateringShows||numShows))}</span>
+                  <span style={{ fontSize:11, color:C.muted }}>Rider: {fmt((p.riderCost||0) * (p.riderShows||numShows))}</span>
+                </div>
+
+                {/* Passes + VIP on same line */}
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.textDim, marginTop: 10, marginBottom: 6 }}>PASSES & VIP</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <Input label="Passes (national total)" value={p.passes} onChange={v => setParty(x=>({...x,passes:v}))} prefix="$" />
+                  <div style={{ display:"flex", alignItems:"flex-end", paddingBottom:12 }}>
+                    <div style={{ fontSize:11, color:C.muted, padding:"8px 10px", background:C.bg, borderRadius:6, width:"100%" }}>
+                      VIP pkg costs managed in<br/><strong style={{color:C.accent}}>🎟️ Ticket Scaling tab</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 8, padding: "8px 10px", background: C.panel, borderRadius: 6, display: "flex", justifyContent: "space-between", borderTop: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Show Costs Total</span>
+                  <strong style={{ fontSize: 13, color: C.accent }}>{fmt(totalShowCosts)}</strong>
                 </div>
               </Section>
 
@@ -1465,9 +1586,45 @@ export default function App() {
               <Section title="🎛️ Production">
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   <Input label="Backline Shows" value={p.backlineShows} onChange={v => setParty(x=>({...x,backlineShows:v}))} />
-                  <Input label="Backline/Show" value={p.backlineCost} onChange={v => setParty(x=>({...x,backlineCost:v}))} prefix="$" />
-                  <Input label="Lighting Shows" value={p.lightingShows} onChange={v => setParty(x=>({...x,lightingShows:v}))} />
-                  <Input label="Lighting Rate" value={p.lightingRate} onChange={v => setParty(x=>({...x,lightingRate:v}))} prefix="$" />
+                  <Input label="Backline / Show" value={p.backlineCost} onChange={v => setParty(x=>({...x,backlineCost:v}))} prefix="$" />
+                  <Input label="Lighting Op / Shows" value={p.lightingShows} onChange={v => setParty(x=>({...x,lightingShows:v}))} />
+                  <Input label="Lighting Op Rate" value={p.lightingRate} onChange={v => setParty(x=>({...x,lightingRate:v}))} prefix="$" />
+                  <Input label="FOH Op / Shows" value={p.fohShows} onChange={v => setParty(x=>({...x,fohShows:v}))} />
+                  <Input label="FOH Op Rate" value={p.fohRate} onChange={v => setParty(x=>({...x,fohRate:v}))} prefix="$" />
+                </div>
+
+                {/* Additional production items */}
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.textDim, marginTop: 10, marginBottom: 6 }}>ADDITIONAL PRODUCTION</div>
+                {(p.additionalProd || []).map((item, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 120px 32px", gap: 6, marginBottom: 6, alignItems: "center" }}>
+                    <select value={item.type} onChange={e => {
+                        const updated = [...p.additionalProd];
+                        updated[i] = { ...updated[i], type: e.target.value, label: e.target.value === "Custom" ? updated[i].label : e.target.value };
+                        setParty(x=>({...x, additionalProd: updated}));
+                      }}
+                      style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13 }}>
+                      {["Screen","Geyser / CO2","Extra Lighting Rig","Props","Pyrotechnics","Staging","Barrier","Generator","Custom"].map(o => <option key={o}>{o}</option>)}
+                    </select>
+                    {item.type === "Custom" && (
+                      <input value={item.label||""} placeholder="Item name"
+                        onChange={e => { const u=[...p.additionalProd]; u[i]={...u[i],label:e.target.value}; setParty(x=>({...x,additionalProd:u})); }}
+                        style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:12 }} />
+                    )}
+                    <input type="number" value={item.cost||""} placeholder="$"
+                      onChange={e => { const u=[...p.additionalProd]; u[i]={...u[i],cost:+e.target.value}; setParty(x=>({...x,additionalProd:u})); }}
+                      style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13 }} />
+                    <button onClick={() => setParty(x=>({...x, additionalProd: x.additionalProd.filter((_,j)=>j!==i)}))}
+                      style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:18 }}>×</button>
+                  </div>
+                ))}
+                <button onClick={() => setParty(x=>({...x, additionalProd: [...(x.additionalProd||[]), { type:"Screen", label:"Screen", cost:0 }]}))}
+                  style={{ background:"none", border:`1px dashed ${C.border}`, borderRadius:6, color:C.muted, padding:"5px 14px", cursor:"pointer", fontSize:12, marginTop:4 }}>
+                  + Add Item
+                </button>
+
+                <div style={{ marginTop: 8, padding: "8px 10px", background: C.panel, borderRadius: 6, display: "flex", justifyContent: "space-between", borderTop: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Production Total</span>
+                  <strong style={{ fontSize: 13, color: C.accent }}>{fmt(totalProduction)}</strong>
                 </div>
               </Section>
 
@@ -1478,11 +1635,19 @@ export default function App() {
                   <Input label="Publicist" value={p.publicist} onChange={v => setParty(x=>({...x,publicist:v}))} prefix="$" />
                   <Input label="Creative" value={p.creative} onChange={v => setParty(x=>({...x,creative:v}))} prefix="$" />
                 </div>
+                <div style={{ marginTop: 8, padding: "8px 10px", background: C.panel, borderRadius: 6, display: "flex", justifyContent: "space-between", borderTop: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Marketing Total</span>
+                  <strong style={{ fontSize: 13, color: C.accent }}>{fmt(totalMarketing)}</strong>
+                </div>
               </Section>
 
               {/* MISC */}
               <Section title="⚙️ Misc & Contingency">
                 <Input label="Contingency" value={p.contingency} onChange={v => setParty(x=>({...x,contingency:v}))} prefix="$" />
+                <div style={{ marginTop: 4, padding: "8px 10px", background: C.panel, borderRadius: 6, display: "flex", justifyContent: "space-between", borderTop: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Misc Total</span>
+                  <strong style={{ fontSize: 13, color: C.accent }}>{fmt(totalMisc)}</strong>
+                </div>
               </Section>
 
               {/* EXPENSE SUMMARY */}
@@ -3752,7 +3917,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
 }
 
 // ─── TICKETING TAB ────────────────────────────────────────────────────────
-const AGENTS = ["Oztix", "Moshtix", "Ticketek", "Ticketmaster", "Silverback", "Other"];
+const AGENTS = ["Oztix", "Moshtix", "Ticketek", "Ticketmaster", "Silverback", "Tribute Touring", "Other"];
 
 function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingRecords, ticketTypes }) {
 
