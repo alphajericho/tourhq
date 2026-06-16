@@ -891,40 +891,15 @@ export default function App() {
     const knownCities = [...new Set(venues.map(v => v.city))].sort();
     const knownVenues = venues.map(v => ({ city: v.city, name: v.name, cap: v.cap, hire: v.hire, perHead: v.perHead }));
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/import-shows", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 2000,
-          system: `You are a touring industry data parser. Extract show information from the user's text and return ONLY valid JSON, no markdown, no explanation.
-
-Known venues database: ${JSON.stringify(knownVenues)}
-Known cities: ${knownCities.join(", ")}
-
-Return a JSON array of show objects. Each object must have these exact keys:
-- city: string (city name, match to known cities where possible)
-- venueName: string (venue name, match to known venues where possible, use "TBC" if unknown)
-- cap: number (capacity, use 0 if unknown — look up from known venues if matched)
-- ticketPrice: number (gross ticket price AUD, use 0 if not mentioned)
-- flatHire: number (flat venue hire, use known venue data if matched, else 0)
-- perHead: number (per head fee, use known venue data if matched, else 5.5)
-- attendPct: number (forecast attendance as decimal e.g. 0.7, default 0.6)
-- notes: string (any extra info, empty string if none)
-- isNewVenue: boolean (true if venue not in known venues database)
-- isNewCity: boolean (true if city not in known cities list)
-
-Match venues intelligently — "Metro" likely means "Metro Theatre Sydney" etc.
-Return ONLY the JSON array, nothing else.`,
-          messages: [{ role: "user", content: importText }]
-        })
+        body: JSON.stringify({ text: importText, knownVenues, knownCities })
       });
       const data = await res.json();
-      const raw = data.content?.[0]?.text || "";
-      const cleaned = raw.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(cleaned);
-      if (!Array.isArray(parsed)) throw new Error("Expected array");
-      setImportPreview(parsed);
+      if (data.error) throw new Error(data.error);
+      if (!Array.isArray(data.shows)) throw new Error("Expected array");
+      setImportPreview(data.shows);
     } catch (e) {
       setImportError("Could not parse show list — try adding more detail or check the format.");
     }
