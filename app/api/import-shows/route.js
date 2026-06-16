@@ -13,18 +13,20 @@ Known venues database: ${JSON.stringify(knownVenues || [])}
 Known cities: ${(knownCities || []).join(", ")}
 
 Return a JSON array of show objects. Each object must have these exact keys:
-- city: string (city name, match to known cities where possible)
-- venueName: string (venue name, match to known venues where possible, use "TBC" if unknown)
-- cap: number (capacity, use 0 if unknown — use known venue data if matched)
+- city: string (city name — always use the city provided, expand abbreviations: "Coffs Hbr" = "Coffs Harbour", "Melb" = "Melbourne", "Syd" = "Sydney", "Bris" = "Brisbane", "Adel" = "Adelaide" etc)
+- venueName: string (ALWAYS use the venue name from the input, even if not in the database. NEVER use "TBC" unless the input literally says "TBC". Match to known venues where possible for data lookup, but always write the actual venue name.)
+- cap: number (capacity — use known venue data if name matches, else 0)
 - ticketPrice: number (gross ticket price AUD, use 0 if not mentioned)
-- flatHire: number (flat venue hire, use known venue data if matched, else 0)
-- perHead: number (per head fee, use known venue data if matched, else 5.5)
+- flatHire: number (flat venue hire — use known venue data if matched, else 0)
+- perHead: number (per head fee — use known venue data if matched, else 5.5)
 - attendPct: number (forecast attendance as decimal e.g. 0.7, default 0.6)
-- notes: string (any extra info such as all ages, 18+, etc. Empty string if none)
-- isNewVenue: boolean (true if venue not in known venues database)
+- notes: string (any extra info such as all ages, 18+ etc. Empty string if none)
+- isNewVenue: boolean (true if venue name not found in known venues database)
 - isNewCity: boolean (true if city not in known cities list)
 
-Match venues intelligently. Return ONLY the JSON array, nothing else.`
+CRITICAL: Never use "TBC" for venueName. If a venue is given in the input, always use that name.
+Match venues intelligently — "Mo's Desert Club House" matches "Mo's Desert Clubhouse" etc.
+Return ONLY the JSON array, nothing else.`
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
