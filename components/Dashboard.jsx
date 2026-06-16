@@ -1486,16 +1486,7 @@ Return ONLY the JSON array, nothing else.`,
                         <textarea
                           value={importText}
                           onChange={e => setImportText(e.target.value)}
-                          placeholder={"Paste your show list here. For example:
-
-Sydney - Hordern Pavilion - 5000 cap
-Melbourne - Margaret Court Arena - 7500 cap - $89.90
-Brisbane - Riverstage - 4500 cap
-
-Or just:
-Syd Hordern
-Melb Festival Hall
-Bne Riverstage"}
+                          placeholder="Paste your show list in any format. e.g. Sydney - Hordern Pavilion - 5000 cap, Melbourne - Margaret Court Arena - 7500 cap - $89.90, Brisbane - Riverstage - 4500 cap. Or just: Syd Hordern / Melb Festival Hall / Bne Riverstage"
                           rows={8}
                           style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, padding:"10px 12px", fontSize:13, resize:"vertical", fontFamily:"inherit", boxSizing:"border-box" }}
                         />
