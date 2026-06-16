@@ -862,6 +862,11 @@ export default function App() {
   const updateShow = useCallback((i, s) => setShows(prev => prev.map((x, j) => j === i ? s : x)), []);
   const removeShow = useCallback((i) => setShows(prev => prev.filter((_, j) => j !== i)), []);
   const addShow = () => setShows(prev => [...prev, defaultShow()]);
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importParsing, setImportParsing] = useState(false);
+  const [importPreview, setImportPreview] = useState(null);
+  const [importError, setImportError] = useState("");
 
   // ── TICKETING RECORDS (lifted from TicketingTab so ShowByShow can read live sales) ──
   const blankTicketRecord = (s) => ({
@@ -876,6 +881,87 @@ export default function App() {
     vipIncludesTicket: true,
   });
   const [ticketingRecords, setTicketingRecords] = useState(() => [blankTicketRecord()]);
+
+  // ── AI SHOW IMPORT ──
+  const parseImportText = async () => {
+    if (!importText.trim()) return;
+    setImportParsing(true);
+    setImportError("");
+    setImportPreview(null);
+    const knownCities = [...new Set(venues.map(v => v.city))].sort();
+    const knownVenues = venues.map(v => ({ city: v.city, name: v.name, cap: v.cap, hire: v.hire, perHead: v.perHead }));
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 2000,
+          system: `You are a touring industry data parser. Extract show information from the user's text and return ONLY valid JSON, no markdown, no explanation.
+
+Known venues database: ${JSON.stringify(knownVenues)}
+Known cities: ${knownCities.join(", ")}
+
+Return a JSON array of show objects. Each object must have these exact keys:
+- city: string (city name, match to known cities where possible)
+- venueName: string (venue name, match to known venues where possible, use "TBC" if unknown)
+- cap: number (capacity, use 0 if unknown — look up from known venues if matched)
+- ticketPrice: number (gross ticket price AUD, use 0 if not mentioned)
+- flatHire: number (flat venue hire, use known venue data if matched, else 0)
+- perHead: number (per head fee, use known venue data if matched, else 5.5)
+- attendPct: number (forecast attendance as decimal e.g. 0.7, default 0.6)
+- notes: string (any extra info, empty string if none)
+- isNewVenue: boolean (true if venue not in known venues database)
+- isNewCity: boolean (true if city not in known cities list)
+
+Match venues intelligently — "Metro" likely means "Metro Theatre Sydney" etc.
+Return ONLY the JSON array, nothing else.`,
+          messages: [{ role: "user", content: importText }]
+        })
+      });
+      const data = await res.json();
+      const raw = data.content?.[0]?.text || "";
+      const cleaned = raw.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+      if (!Array.isArray(parsed)) throw new Error("Expected array");
+      setImportPreview(parsed);
+    } catch (e) {
+      setImportError("Could not parse show list — try adding more detail or check the format.");
+    }
+    setImportParsing(false);
+  };
+
+  const confirmImport = () => {
+    if (!importPreview) return;
+    const newShows = importPreview.map(s => ({
+      city: s.city || "Sydney",
+      venueName: s.venueName || "TBC",
+      cap: s.cap || 0,
+      ticketPrice: s.ticketPrice || 0,
+      flatHire: s.flatHire || 0,
+      perHead: s.perHead ?? 5.5,
+      attendPct: s.attendPct || 0.6,
+      notes: s.notes || "",
+    }));
+    // Add any new venues to the database
+    importPreview.forEach(s => {
+      if (s.isNewVenue && s.venueName && s.venueName !== "TBC") {
+        const exists = venues.find(v => v.name === s.venueName);
+        if (!exists) {
+          setVenues(prev => [...prev, {
+            ...BLANK_VENUE, city: s.city, name: s.venueName,
+            cap: s.cap || 0, hire: s.flatHire || 0, perHead: s.perHead || 5.5,
+            state: "OTHER", dealType: s.flatHire > 0 ? "flat" : "door",
+            production:0, notes:"", customCity:"", _id: Date.now() + Math.random()
+          }]);
+        }
+      }
+    });
+    setShows(newShows);
+    setImportPreview(null);
+    setImportText("");
+    setShowImport(false);
+  };
 
   // ── SHOW BY SHOW DATA (lifted so it persists via save/load) ──
   const blankSBShow = (s) => ({
@@ -1375,6 +1461,116 @@ export default function App() {
 
               {/* SHOWS */}
               <Section title="📍 Shows & Venues">
+                {/* Header row with Add Show + Import buttons */}
+                <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginBottom:12 }}>
+                  <button onClick={() => { setShowImport(true); setImportPreview(null); setImportError(""); setImportText(""); }}
+                    style={{ background:C.accent, border:"none", borderRadius:6, color:"#fff", padding:"7px 14px", cursor:"pointer", fontWeight:700, fontSize:12 }}>
+                    ⚡ Import Show List
+                  </button>
+                </div>
+
+                {/* AI Import Panel */}
+                {showImport && (
+                  <div style={{ background:C.panel, borderRadius:10, padding:16, marginBottom:16, border:`1px solid ${C.accent}` }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                      <div>
+                        <div style={{ fontWeight:700, color:C.accent, fontSize:13 }}>⚡ AI Show Importer</div>
+                        <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>Paste your show list in any format — email, notes, spreadsheet text. Claude will parse it.</div>
+                      </div>
+                      <button onClick={() => setShowImport(false)}
+                        style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:20 }}>×</button>
+                    </div>
+
+                    {!importPreview ? (
+                      <>
+                        <textarea
+                          value={importText}
+                          onChange={e => setImportText(e.target.value)}
+                          placeholder={"Paste your show list here. For example:
+
+Sydney - Hordern Pavilion - 5000 cap
+Melbourne - Margaret Court Arena - 7500 cap - $89.90
+Brisbane - Riverstage - 4500 cap
+
+Or just:
+Syd Hordern
+Melb Festival Hall
+Bne Riverstage"}
+                          rows={8}
+                          style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, padding:"10px 12px", fontSize:13, resize:"vertical", fontFamily:"inherit", boxSizing:"border-box" }}
+                        />
+                        {importError && (
+                          <div style={{ color:C.red, fontSize:12, marginTop:6 }}>⚠ {importError}</div>
+                        )}
+                        <div style={{ display:"flex", gap:8, marginTop:10 }}>
+                          <button onClick={parseImportText} disabled={importParsing || !importText.trim()}
+                            style={{ background:importParsing ? C.muted : C.green, border:"none", borderRadius:6, color:"#fff", padding:"9px 20px", cursor:importParsing ? "not-allowed" : "pointer", fontWeight:700, fontSize:13 }}>
+                            {importParsing ? "⏳ Parsing…" : "🔍 Parse Shows"}
+                          </button>
+                          <button onClick={() => setShowImport(false)}
+                            style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, padding:"9px 14px", cursor:"pointer", fontSize:13 }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize:12, color:C.green, fontWeight:700, marginBottom:10 }}>
+                          ✅ Parsed {importPreview.length} show{importPreview.length !== 1 ? "s" : ""} — review before importing
+                        </div>
+                        <div style={{ borderRadius:8, overflow:"hidden", border:`1px solid ${C.border}`, marginBottom:12 }}>
+                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 80px 90px 90px 24px", gap:8, padding:"7px 12px", background:C.bg, fontSize:11, color:C.muted, textTransform:"uppercase" }}>
+                            <span>City</span><span>Venue</span><span>Cap</span><span>Ticket $</span><span>Hire $</span><span></span>
+                          </div>
+                          {importPreview.map((s, i) => (
+                            <div key={i} style={{ display:"grid", gridTemplateColumns:"1fr 1fr 80px 90px 90px 24px", gap:8, padding:"8px 12px", borderTop:`1px solid ${C.border}`, fontSize:13, alignItems:"center",
+                              background: s.isNewVenue ? "rgba(249,115,22,0.07)" : "transparent" }}>
+                              <span style={{ color:C.text }}>
+                                {s.city}
+                                {s.isNewCity && <span style={{ fontSize:10, color:C.accent, marginLeft:4 }}>NEW</span>}
+                              </span>
+                              <span style={{ color:C.text }}>
+                                {s.venueName}
+                                {s.isNewVenue && <span style={{ fontSize:10, color:C.accent, marginLeft:4 }}>NEW</span>}
+                              </span>
+                              <input type="number" value={s.cap||""} placeholder="0"
+                                onChange={e => setImportPreview(prev => prev.map((x,j) => j===i ? {...x,cap:+e.target.value} : x))}
+                                style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 7px", fontSize:12, width:"100%" }} />
+                              <input type="number" value={s.ticketPrice||""} placeholder="0"
+                                onChange={e => setImportPreview(prev => prev.map((x,j) => j===i ? {...x,ticketPrice:+e.target.value} : x))}
+                                style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 7px", fontSize:12, width:"100%" }} />
+                              <input type="number" value={s.flatHire||""} placeholder="0"
+                                onChange={e => setImportPreview(prev => prev.map((x,j) => j===i ? {...x,flatHire:+e.target.value} : x))}
+                                style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 7px", fontSize:12, width:"100%" }} />
+                              <button onClick={() => setImportPreview(prev => prev.filter((_,j) => j!==i))}
+                                style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:16 }}>×</button>
+                            </div>
+                          ))}
+                        </div>
+                        {importPreview.some(s => s.isNewVenue) && (
+                          <div style={{ fontSize:11, color:C.accent, marginBottom:10 }}>
+                            🔶 Orange rows are new venues — they will be added to your Venue Database automatically
+                          </div>
+                        )}
+                        <div style={{ display:"flex", gap:8 }}>
+                          <button onClick={confirmImport}
+                            style={{ background:C.green, border:"none", borderRadius:6, color:"#fff", padding:"9px 20px", cursor:"pointer", fontWeight:700, fontSize:13 }}>
+                            ✅ Import {importPreview.length} Shows
+                          </button>
+                          <button onClick={() => setImportPreview(null)}
+                            style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, padding:"9px 14px", cursor:"pointer", fontSize:13 }}>
+                            ← Edit Text
+                          </button>
+                          <button onClick={() => setShowImport(false)}
+                            style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, padding:"9px 14px", cursor:"pointer", fontSize:13 }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {shows.map((s, i) => (
                   <ShowRow key={i} show={s} idx={i} onChange={updateShow} onRemove={removeShow} venues={venues} onAddVenue={v => setVenues(prev => [...prev, v])} />
                 ))}
