@@ -1485,29 +1485,32 @@ export default function App() {
                           ✅ Parsed {importPreview.length} show{importPreview.length !== 1 ? "s" : ""} — review before importing
                         </div>
                         <div style={{ borderRadius:8, overflow:"hidden", border:`1px solid ${C.border}`, marginBottom:12 }}>
-                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 80px 90px 90px 24px", gap:8, padding:"7px 12px", background:C.bg, fontSize:11, color:C.muted, textTransform:"uppercase" }}>
-                            <span>City</span><span>Venue</span><span>Cap</span><span>Ticket $</span><span>Hire $</span><span></span>
+                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 70px 80px 80px 80px 24px", gap:6, padding:"7px 12px", background:C.bg, fontSize:11, color:C.muted, textTransform:"uppercase" }}>
+                            <span>City</span><span>Venue</span><span>Cap</span><span>Ticket $</span><span>Flat Hire</span><span>Per Head</span><span></span>
                           </div>
                           {importPreview.map((s, i) => (
-                            <div key={i} style={{ display:"grid", gridTemplateColumns:"1fr 1fr 80px 90px 90px 24px", gap:8, padding:"8px 12px", borderTop:`1px solid ${C.border}`, fontSize:13, alignItems:"center",
+                            <div key={i} style={{ display:"grid", gridTemplateColumns:"1fr 1fr 70px 80px 80px 80px 24px", gap:6, padding:"8px 12px", borderTop:`1px solid ${C.border}`, fontSize:13, alignItems:"center",
                               background: s.isNewVenue ? "rgba(249,115,22,0.07)" : "transparent" }}>
-                              <span style={{ color:C.text }}>
+                              <span style={{ color:C.text, fontSize:12 }}>
                                 {s.city}
                                 {s.isNewCity && <span style={{ fontSize:10, color:C.accent, marginLeft:4 }}>NEW</span>}
                               </span>
-                              <span style={{ color:C.text }}>
+                              <span style={{ color:C.text, fontSize:12 }}>
                                 {s.venueName}
                                 {s.isNewVenue && <span style={{ fontSize:10, color:C.accent, marginLeft:4 }}>NEW</span>}
                               </span>
                               <input type="number" value={s.cap||""} placeholder="0"
                                 onChange={e => setImportPreview(prev => prev.map((x,j) => j===i ? {...x,cap:+e.target.value} : x))}
-                                style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 7px", fontSize:12, width:"100%" }} />
+                                style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 6px", fontSize:12, width:"100%" }} />
                               <input type="number" value={s.ticketPrice||""} placeholder="0"
                                 onChange={e => setImportPreview(prev => prev.map((x,j) => j===i ? {...x,ticketPrice:+e.target.value} : x))}
-                                style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 7px", fontSize:12, width:"100%" }} />
+                                style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 6px", fontSize:12, width:"100%" }} />
                               <input type="number" value={s.flatHire||""} placeholder="0"
                                 onChange={e => setImportPreview(prev => prev.map((x,j) => j===i ? {...x,flatHire:+e.target.value} : x))}
-                                style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 7px", fontSize:12, width:"100%" }} />
+                                style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 6px", fontSize:12, width:"100%" }} />
+                              <input type="number" value={s.perHead||""} placeholder="5.5"
+                                onChange={e => setImportPreview(prev => prev.map((x,j) => j===i ? {...x,perHead:+e.target.value} : x))}
+                                style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 6px", fontSize:12, width:"100%" }} />
                               <button onClick={() => setImportPreview(prev => prev.filter((_,j) => j!==i))}
                                 style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:16 }}>×</button>
                             </div>
