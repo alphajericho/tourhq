@@ -2830,6 +2830,29 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
             {/* Row header */}
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: 14 }}>
               <div style={{ display:"flex", gap: 10, alignItems:"center" }}>
+                {/* Up/Down order buttons */}
+                {ticketTypes.length > 1 && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                    <button onClick={() => {
+                      if (idx === 0) return;
+                      setTicketTypes(prev => {
+                        const next = [...prev];
+                        [next[idx-1], next[idx]] = [next[idx], next[idx-1]];
+                        return next;
+                      });
+                    }} disabled={idx === 0}
+                    style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:4, color: idx === 0 ? C.border : C.muted, cursor: idx === 0 ? "default" : "pointer", padding:"1px 6px", fontSize:10, lineHeight:1.4 }}>▲</button>
+                    <button onClick={() => {
+                      if (idx === ticketTypes.length - 1) return;
+                      setTicketTypes(prev => {
+                        const next = [...prev];
+                        [next[idx], next[idx+1]] = [next[idx+1], next[idx]];
+                        return next;
+                      });
+                    }} disabled={idx === ticketTypes.length - 1}
+                    style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:4, color: idx === ticketTypes.length-1 ? C.border : C.muted, cursor: idx === ticketTypes.length-1 ? "default" : "pointer", padding:"1px 6px", fontSize:10, lineHeight:1.4 }}>▼</button>
+                  </div>
+                )}
                 <select value={t.type} onChange={e => {
                   const newType = e.target.value;
                   updType(t.id, "type", newType);
