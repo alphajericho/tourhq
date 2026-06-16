@@ -790,7 +790,7 @@ export default function App() {
     setArtist({ name: "", agent: "", status: "IN CONSIDERATION", deal: { ...BLANK_DEAL } });
     setShows([defaultShow()]);
     setParty({ band: 4, crew: 2, local: 3, intlFlightCost: 0, intlFlightPax: 0, domLegs: 0, domCostPerLeg: 350, domPax: 0, accomNights: 0, accomRooms: 0, accomRate: 180, sprinterLegs: 0, sprinterCost: 500, vanDays: 0, vans: 1, vanRate: 150, drivers: 0, driverDays: 0, driverRate: 350, perDiemPax: 0, pdRate: 75, pdShows: 0, catering: 0, cateringShows: 0, riderShows: 0, riderCost: 0, visaPax: 0, visaFee: 420, union: 150, tourMgrRate: 600, tourMgrDays: 0, stagehandShows: 0, stagehandRate: 440, supportStaff: 0, supportRate: 450, supports: 0, supportFee: 400, backlineShows: 0, backlineCost: 2200, lightingShows: 0, lightingRate: 550, fohShows: 0, fohRate: 500, additionalProd: [], marketing: 500, publicist: 1500, creative: 1000, contingency: 5000, passes: 350 });
-    setTicketTypes([{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 }]);
+    setTicketTypes([{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6, paxPer: 1, paxPer: 1 }]);
     setVipPackageCost({ poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 });
     setTicketingRecords([blankTicketRecord()]);
     setShowData([blankSBShow()]);
@@ -810,7 +810,7 @@ export default function App() {
     if (!pendingName.trim()) return;
     setShowNameModal(false);
     setSaving(true);
-    const blankPayload = { artist: { name: "", agent: "", status: "IN CONSIDERATION", deal: { ...BLANK_DEAL } }, shows: [defaultShow()], party: {}, fx, ticketTypes: [{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 }], vipPackageCost: { poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 }, ticketingRecords: [blankTicketRecord()], showData: [blankSBShow()], national: { intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0, artistFeeCurrency: 'USD' }, vipItems: [{ label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 }], deposits: [], venues: VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i })) };
+    const blankPayload = { artist: { name: "", agent: "", status: "IN CONSIDERATION", deal: { ...BLANK_DEAL } }, shows: [defaultShow()], party: {}, fx, ticketTypes: [{ id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6, paxPer: 1, paxPer: 1 }], vipPackageCost: { poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 }, ticketingRecords: [blankTicketRecord()], showData: [blankSBShow()], national: { intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0, artistFeeCurrency: 'USD' }, vipItems: [{ label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 }], deposits: [], venues: VENUE_DB.map((v, i) => ({ ...BLANK_VENUE, dealType: v.hire > 0 ? "flat" : "door", production:0, notes:"", customCity:"", ...v, _id: i })) };
     try {
       // Create DB record FIRST — then reset UI state so activeTourId is set before user starts typing
       const res = await fetch('/api/tours', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1025,7 +1025,7 @@ export default function App() {
 
   // ── TICKET SCALING (defined once per tour, propagates to all tabs) ──
   const defaultTicketTypes = () => [
-    { id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6 },
+    { id: 1, type: "GA", label: "General Admission", grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6, paxPer: 1, paxPer: 1 },
   ];
   const [ticketTypes, setTicketTypes] = useState(defaultTicketTypes());
   const [vipPackageCost, setVipPackageCost] = useState({ poster: 0, laminate: 0, lanyard: 0, other: 0, prepPct: 10 });
@@ -2747,7 +2747,7 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
   const addType = () => {
     setTicketTypes(prev => [...prev, {
       id: nextId(), type: "GA", label: "General Admission",
-      grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6,
+      grossPrice: 0, fees: 10, allocation: 0, forecast: 0.6, paxPer: 1,
       ticketLinkId: null, // for VIPWT: which GA/Seated type is the ticket component
     }]);
   };
@@ -2910,7 +2910,21 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
                 <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Forecast %</div>
                 <input type="number" value={t.forecast ? Math.round(t.forecast*100) : ""} onChange={e => updType(t.id, "forecast", (+e.target.value)/100)}
                   style={iS} />
-                {t.allocation > 0 && <div style={{ fontSize:10, color:C.yellow, marginTop:2 }}>= {Math.round(t.allocation * (t.forecast||0.6)).toLocaleString()} tickets</div>}
+                {t.allocation > 0 && (
+                  <div style={{ fontSize:10, color:C.yellow, marginTop:2 }}>
+                    = {Math.round(t.allocation * (t.forecast||0.6)).toLocaleString()} tickets
+                    {(t.paxPer||1) > 1 && <span style={{ color:C.accent, marginLeft:4 }}>({Math.round(t.allocation * (t.forecast||0.6) * (t.paxPer||1)).toLocaleString()} pax)</span>}
+                  </div>
+                )}
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Pax / Ticket</div>
+                <input type="number" value={t.paxPer || ""} placeholder="1"
+                  onChange={e => updType(t.id, "paxPer", Math.max(1, +e.target.value || 1))}
+                  style={iS} />
+                <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>
+                  {(t.paxPer||1) > 1 ? `Group — ${t.paxPer} people per ticket` : "1 ticket = 1 person"}
+                </div>
               </div>
             </div>
 
@@ -2981,6 +2995,7 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
           {ticketTypes.map(t => {
             const c = calc(t);
             const forecastSold = Math.round((t.allocation||0) * (t.forecast||0.6));
+            const forecastPax = forecastSold * (t.paxPer || 1);
             const forecastRev = forecastSold * (t.type === "VIPWT" ? c.netVipComponent : c.net);
             const sellOutRev = (t.allocation||0) * (t.type === "VIPWT" ? c.netVipComponent : c.net);
             return (
@@ -3097,6 +3112,8 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
       // Accurate per-type calculation using Ticket Scaling prices
       const typeBreakdown = ticketTypes.map(tt => {
         const sold = +typeCounts[tt.id] || 0;
+        const paxPer = tt.paxPer || 1; // group ticket multiplier
+        const paxAttending = sold * paxPer; // actual bodies through the door
         const gross = tt.grossPrice || 0;
         const fees = tt.fees || 10;
         const gst = gross / 11;
@@ -3115,14 +3132,15 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
         } else {
           revenue = sold * net;
         }
-        return { id: tt.id, label: tt.label || tt.type, type: tt.type, sold, net, revenue };
+        return { id: tt.id, label: tt.label || tt.type, type: tt.type, sold, paxPer, paxAttending, net, revenue };
       });
       const total = typeBreakdown.reduce((a, t) => a + t.revenue, 0);
-      const gaSold = typeBreakdown.filter(t => t.type !== "VIPWT" && t.type !== "VIPUG").reduce((a,t) => a + t.sold, 0);
-      const vipSold = typeBreakdown.filter(t => t.type === "VIPWT" || t.type === "VIPUG").reduce((a,t) => a + t.sold, 0);
+      const totalPax = typeBreakdown.reduce((a, t) => a + t.paxAttending, 0);
+      const gaSold = typeBreakdown.filter(t => t.type !== "VIPWT" && t.type !== "VIPUG").reduce((a,t) => a + t.paxAttending, 0);
+      const vipSold = typeBreakdown.filter(t => t.type === "VIPWT" || t.type === "VIPUG").reduce((a,t) => a + t.paxAttending, 0);
       const gaRevenue = typeBreakdown.filter(t => t.type !== "VIPWT" && t.type !== "VIPUG").reduce((a,t) => a + t.revenue, 0);
       const vipRevenue = typeBreakdown.filter(t => t.type === "VIPWT" || t.type === "VIPUG").reduce((a,t) => a + t.revenue, 0);
-      return { gaSold, vipSold, gaRevenue, vipRevenue, total, typeBreakdown, hasTypeCounts: true };
+      return { gaSold, vipSold, gaRevenue, vipRevenue, total, totalPax, typeBreakdown, hasTypeCounts: true };
     }
 
     // Fallback: use total agent sold count × catAPrice net
@@ -3628,7 +3646,15 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                                 padding:"4px 0", borderBottom:`1px solid ${C.border}` }}>
                                 <span style={{ fontSize:12, color:C.muted }}>
                                   {t.label}
-                                  <span style={{ fontSize:10, marginLeft:6, color:C.textDim }}>×{t.sold.toLocaleString()} @ net ${t.net.toFixed(2)}</span>
+                                  <span style={{ fontSize:10, marginLeft:6, color:C.textDim }}>
+                                    ×{t.sold.toLocaleString()} tickets
+                                    {(t.paxPer||1) > 1 && (
+                                      <span style={{ color:C.accent, marginLeft:4 }}>
+                                        ({t.paxAttending.toLocaleString()} pax)
+                                      </span>
+                                    )}
+                                    {" @ net $"}{t.net.toFixed(2)}
+                                  </span>
                                 </span>
                                 <span style={{ fontSize:13, fontWeight:700,
                                   color: (t.type==="VIPWT"||t.type==="VIPUG") ? C.yellow : C.text }}>
@@ -3663,7 +3689,12 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
 
                         <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:8, display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                            <span style={{ fontSize:11, color:C.muted }}>Total Net Revenue</span>
+                            <span style={{ fontSize:11, color:C.muted }}>
+                              Total Net Revenue
+                              {liveRevData.totalPax && liveRevData.totalPax !== liveRevData.gaSold + liveRevData.vipSold && (
+                                <span style={{ fontSize:10, color:C.accent, marginLeft:4 }}>({liveRevData.totalPax?.toLocaleString()} pax)</span>
+                              )}
+                            </span>
                             <span style={{ fontSize:14, fontWeight:800, color:C.green }}>{fmt(liveRevData.total)}</span>
                           </div>
                           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -4207,7 +4238,42 @@ function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingR
     const latest = latestEntry(r);
     const total = totalTickets(latest, r);
     const pct = r.cap > 0 ? (total / r.cap * 100) : 0;
-    const revenue = total * (r.ticketPrice || 0);
+
+    // Smart revenue calc — uses ticket type counts × Ticket Scaling net prices when available
+    // Falls back to total × single ticket price field
+    const calcSmartRevenue = (entries) => {
+      // Sum ticketTypeCounts across all entries
+      const typeCounts = {};
+      entries.forEach(entry => {
+        Object.entries(entry.ticketTypeCounts || {}).forEach(([id, count]) => {
+          typeCounts[id] = (typeCounts[id] || 0) + (+count || 0);
+        });
+      });
+      const hasTypeCounts = Object.keys(typeCounts).length > 0 && ticketTypes?.length > 0;
+
+      if (hasTypeCounts) {
+        // Per-type revenue using Ticket Scaling prices
+        let typeRevenue = 0;
+        let typeBreakdown = [];
+        ticketTypes.forEach(tt => {
+          const sold = typeCounts[tt.id] || 0;
+          if (!sold) return;
+          const gross = tt.grossPrice || 0;
+          const fees = tt.fees || 10;
+          const gst = gross / 11;
+          const net = Math.max(0, gross - gst - fees);
+          const rev = sold * net;
+          typeRevenue += rev;
+          typeBreakdown.push({ label: tt.label || tt.type, sold, net, rev });
+        });
+        return { revenue: typeRevenue, typeBreakdown, hasTypeCounts: true };
+      }
+      // Fallback: flat price
+      return { revenue: total * (r.ticketPrice || 0), typeBreakdown: null, hasTypeCounts: false };
+    };
+    const revenueData = calcSmartRevenue(r.entries || []);
+    const revenue = revenueData.revenue;
+
     const vip = vipCount(latest);
     const vipPct = (latest?.vipLimit || r.vipLimit) > 0 ? (vip / (latest?.vipLimit || r.vipLimit) * 100) : null;
 
@@ -4316,9 +4382,25 @@ function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingR
                 </div>
               </div>
               <div style={{ background: C.panel, borderRadius: 8, padding: "12px 14px", border: `1px solid ${C.border}` }}>
-                <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>Est. Revenue</div>
+                <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>
+                  Net Revenue
+                  {revenueData.hasTypeCounts && <span style={{ color: C.green, marginLeft: 6 }}>● By Type</span>}
+                </div>
                 <div style={{ fontSize: 22, fontWeight: 900, color: C.green }}>{fmt(revenue)}</div>
-                <div style={{ fontSize: 11, color: C.muted }}>@ {fmt(r.ticketPrice)} avg</div>
+                {revenueData.hasTypeCounts && revenueData.typeBreakdown ? (
+                  <div style={{ marginTop: 6 }}>
+                    {revenueData.typeBreakdown.map((t, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.muted, marginTop: 2 }}>
+                        <span>{t.label} ×{t.sold}</span>
+                        <span style={{ color: C.text }}>{fmt(t.rev)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: C.muted }}>
+                    {r.ticketPrice > 0 ? `@ ${fmt(r.ticketPrice)} avg` : "Set ticket price or use Ticket Scaling types"}
+                  </div>
+                )}
               </div>
               <div style={{ background: C.panel, borderRadius: 8, padding: "12px 14px", border: `1px solid ${C.border}` }}>
                 <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>VIP Sold</div>
@@ -4506,7 +4588,22 @@ function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingR
       const latest = latestEntry(r);
       const total = totalTickets(latest, r);
       const pct = r.cap > 0 ? (total / r.cap * 100) : 0;
-      const revenue = total * (r.ticketPrice || 0);
+      // Smart revenue: use ticket type counts if available
+      const snapTypeCounts = {};
+      r.entries.forEach(entry => {
+        Object.entries(entry.ticketTypeCounts || {}).forEach(([id, count]) => {
+          snapTypeCounts[id] = (snapTypeCounts[id] || 0) + (+count || 0);
+        });
+      });
+      const hasSnapTypes = Object.keys(snapTypeCounts).length > 0 && ticketTypes?.length > 0;
+      const revenue = hasSnapTypes
+        ? ticketTypes.reduce((sum, tt) => {
+            const sold = snapTypeCounts[tt.id] || 0;
+            const gross = tt.grossPrice || 0;
+            const net = Math.max(0, gross - gross/11 - (tt.fees||10));
+            return sum + sold * net;
+          }, 0)
+        : total * (r.ticketPrice || 0);
       const vip = vipCount(latest);
       const days = daysUntil(r.showDate);
       const agentBreakdown = latest
