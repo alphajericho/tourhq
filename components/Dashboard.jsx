@@ -1013,7 +1013,13 @@ export default function App() {
           cap: s.cap || 0,
           ticketPrice: s.catAPrice || s.ticketPrice || 0,
           showDate: s.date || existing.showDate || "",
-          selectedAgents: existing.selectedAgents || [],
+          // Auto-select ticketing agent from venue database if not already set
+          selectedAgents: existing.selectedAgents?.length ? existing.selectedAgents : (() => {
+            const venueName = s.venue || s.venueName || "";
+            const matchedVenue = venues?.find(vn => vn.name === venueName);
+            const agent = matchedVenue?.ticketingAgent;
+            return agent && agent !== "" ? [agent] : [];
+          })(),
           entries: existing.entries || [],
           vipLimit: existing.vipLimit || 0,
           vipIncludesTicket: existing.vipIncludesTicket !== undefined ? existing.vipIncludesTicket : true,
@@ -2103,8 +2109,18 @@ const VENUE_CITIES = [
 
 const BLANK_VENUE = {
   city:"", customCity:"", state:"NSW", name:"", cap:0,
-  dealType:"flat",   // "flat" | "door"
-  hire:0, production:0, perHead:5.5, notes:""
+  dealType:"flat",   // "flat" | "door" | "perhead"
+  hire:0, production:0, perHead:5.5, notes:"",
+  // Booker contacts (up to 3)
+  contacts: [
+    { company:"", name:"", email:"" },
+    { company:"", name:"", email:"" },
+    { company:"", name:"", email:"" },
+  ],
+  // Marketing details
+  marketing: "",
+  // Ticketing agent for this venue
+  ticketingAgent: "",  // "Ticketmaster" | "Ticketek" | "Oztix" | "Moshtix" | "Silverback" | "Tribute Touring" | "Other" | "Use Own"
 };
 
 function StateBadge({ state }) {
@@ -2118,25 +2134,35 @@ function StateBadge({ state }) {
 }
 
 // ─── VENUE FORM (shared for add + edit) ────────────────────────────────────
-function VenueForm({ initial, onSave, onCancel, title }) {
-  const [v, setV] = useState({ ...BLANK_VENUE, ...initial });
-  const iS = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" };
+const TICKETING_AGENTS = ["", "Ticketmaster", "Ticketek", "Oztix", "Moshtix", "Silverback", "Tribute Touring", "Other", "Use Own"];
 
-  const cityLabel = v.city === "Other" ? (v.customCity || "") : v.city;
+function VenueForm({ initial, onSave, onCancel, title }) {
+  const [v, setV] = useState({ ...BLANK_VENUE, ...initial,
+    contacts: initial?.contacts?.length ? initial.contacts : [
+      { company:"", name:"", email:"" },
+      { company:"", name:"", email:"" },
+      { company:"", name:"", email:"" },
+    ]
+  });
+  const iS = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" };
+  const updContact = (i, key, val) => {
+    const c = [...v.contacts];
+    c[i] = { ...c[i], [key]: val };
+    setV(x => ({ ...x, contacts: c }));
+  };
 
   return (
     <div style={{ background:C.panel, borderRadius:10, padding:20, marginBottom:16, border:`1px solid ${C.accent}` }}>
       <div style={{ fontWeight:700, color:C.accent, marginBottom:14, fontSize:13 }}>{title}</div>
 
+      {/* Row 1: State / City / Name */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 2fr", gap:10, marginBottom:10 }}>
-        {/* State */}
         <div>
           <Label>State / Region</Label>
           <select value={v.state} onChange={e=>setV(x=>({...x,state:e.target.value}))} style={iS}>
             {VENUE_STATES.map(s=><option key={s} value={s}>{s}{s==="INT"?" — International":s==="OTH"?" — Other":""}</option>)}
           </select>
         </div>
-        {/* City */}
         <div>
           <Label>City</Label>
           {v.state === "INT" ? (
@@ -2154,50 +2180,76 @@ function VenueForm({ initial, onSave, onCancel, title }) {
             </>
           )}
         </div>
-        {/* Name */}
         <div>
           <Label>Venue Name</Label>
           <input placeholder="e.g. Crowbar Sydney" value={v.name} onChange={e=>setV(x=>({...x,name:e.target.value}))} style={iS} />
         </div>
       </div>
 
+      {/* Row 2: Capacity / Deal / Flat Hire / Per Head / Production */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr", gap:10, marginBottom:10 }}>
-        {/* Capacity */}
         <div>
           <Label>Capacity</Label>
           <input type="number" placeholder="0" value={v.cap||""} onChange={e=>setV(x=>({...x,cap:+e.target.value}))} style={iS} />
         </div>
-        {/* Deal type */}
         <div>
           <Label>Deal Type</Label>
           <select value={v.dealType} onChange={e=>setV(x=>({...x,dealType:e.target.value}))} style={iS}>
             <option value="flat">Flat Hire</option>
             <option value="door">Door Deal</option>
+            <option value="perhead">Per Head Only</option>
           </select>
         </div>
-        {/* Flat hire — only if flat */}
         <div>
-          <Label>Flat Hire ($AUD)</Label>
-          <input type="number" placeholder="0" value={v.hire||""} disabled={v.dealType==="door"}
+          <Label>Flat Hire ($)</Label>
+          <input type="number" placeholder="0" value={v.hire||""} disabled={v.dealType==="door"||v.dealType==="perhead"}
             onChange={e=>setV(x=>({...x,hire:+e.target.value}))}
-            style={{ ...iS, opacity: v.dealType==="door" ? 0.4 : 1 }} />
+            style={{ ...iS, opacity: (v.dealType==="door"||v.dealType==="perhead") ? 0.4 : 1 }} />
         </div>
-        {/* Production */}
-        <div>
-          <Label>Production Cost ($)</Label>
-          <input type="number" placeholder="0" value={v.production||""} onChange={e=>setV(x=>({...x,production:+e.target.value}))} style={iS} />
-        </div>
-        {/* Per head */}
         <div>
           <Label>Per Head ($)</Label>
-          <input type="number" step="0.5" placeholder="5.50" value={v.perHead||""} onChange={e=>setV(x=>({...x,perHead:+e.target.value}))} style={iS} />
+          <input type="number" step="0.5" placeholder="5.50" value={v.perHead||""} disabled={v.dealType==="flat"}
+            onChange={e=>setV(x=>({...x,perHead:+e.target.value}))}
+            style={{ ...iS, opacity: v.dealType==="flat" ? 0.4 : 1 }} />
+        </div>
+        <div>
+          <Label>Production ($)</Label>
+          <input type="number" placeholder="0" value={v.production||""} onChange={e=>setV(x=>({...x,production:+e.target.value}))} style={iS} />
         </div>
       </div>
 
+      {/* Row 3: Ticketing Agent */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 3fr", gap:10, marginBottom:14 }}>
+        <div>
+          <Label>Ticketing Agent</Label>
+          <select value={v.ticketingAgent||""} onChange={e=>setV(x=>({...x,ticketingAgent:e.target.value}))} style={iS}>
+            {TICKETING_AGENTS.map(a => <option key={a} value={a}>{a || "— Not set —"}</option>)}
+          </select>
+          <div style={{ fontSize:10, color:C.muted, marginTop:3 }}>Auto-selects in Ticket Counts</div>
+        </div>
+        <div>
+          <Label>Marketing Details</Label>
+          <input placeholder="e.g. co-promote with XFM, social spend $2k, street press..."
+            value={v.marketing||""} onChange={e=>setV(x=>({...x,marketing:e.target.value}))} style={iS} />
+        </div>
+      </div>
+
+      {/* Row 4: Booker Contacts */}
+      <div style={{ marginBottom:14 }}>
+        <div style={{ fontSize:12, fontWeight:700, color:C.textDim, marginBottom:8, textTransform:"uppercase" }}>Booker / Venue Contacts</div>
+        {(v.contacts||[]).map((c, i) => (
+          <div key={i} style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:6 }}>
+            <input placeholder={`Company ${i+1}`} value={c.company||""} onChange={e=>updContact(i,"company",e.target.value)} style={iS} />
+            <input placeholder={`Name ${i+1}`} value={c.name||""} onChange={e=>updContact(i,"name",e.target.value)} style={iS} />
+            <input placeholder={`Email ${i+1}`} value={c.email||""} onChange={e=>updContact(i,"email",e.target.value)} style={iS} />
+          </div>
+        ))}
+      </div>
+
       {/* Notes */}
-      <div style={{ marginBottom:12 }}>
+      <div style={{ marginBottom:14 }}>
         <Label>Notes</Label>
-        <textarea placeholder="e.g. Loading dock rear lane, PA available, 18+ only, contact: Joe 0400..."
+        <textarea placeholder="e.g. Loading dock rear lane, PA available, 18+ only, parking for 2 trucks..."
           value={v.notes||""} onChange={e=>setV(x=>({...x,notes:e.target.value}))} rows={2}
           style={{ ...iS, resize:"vertical" }} />
       </div>
@@ -2312,6 +2364,8 @@ function VenueTab({ venues, setVenues }) {
                   <span style={{ fontSize:12, color:C.textDim }}>{v.city}</span>
                   <div>
                     <div style={{ fontSize:13, fontWeight:700, color:C.text }}>{v.name}</div>
+                    {v.ticketingAgent && <div style={{ fontSize:11, color:C.accent, marginTop:2 }}>🎟 {v.ticketingAgent}</div>}
+                    {v.contacts?.[0]?.name && <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>👤 {v.contacts[0].name}{v.contacts[0].company ? ` — ${v.contacts[0].company}` : ""}</div>}
                     {v.notes && <div style={{ fontSize:11, color:C.muted, fontStyle:"italic", marginTop:2 }}>{v.notes}</div>}
                   </div>
                   <div style={{ textAlign:"center" }}>
