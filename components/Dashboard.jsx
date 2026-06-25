@@ -765,22 +765,49 @@ export default function App() {
     } catch (e) { setSaveMsg("❌ Load failed"); }
   };
 
+  // ── localStorage backup helpers ──
+  const localBackupKey = (id) => `udo_tour_${id || "unsaved"}`;
+  const saveToLocal = (id, name, payload) => {
+    try {
+      const backup = { id, name, payload, savedAt: new Date().toISOString() };
+      localStorage.setItem(localBackupKey(id), JSON.stringify(backup));
+      // Keep an index of all local tours
+      const idx = JSON.parse(localStorage.getItem("udo_tour_index") || "[]");
+      if (!idx.find(t => t.id === id)) {
+        idx.push({ id, name, savedAt: backup.savedAt });
+        localStorage.setItem("udo_tour_index", JSON.stringify(idx));
+      } else {
+        const updated = idx.map(t => t.id === id ? { ...t, name, savedAt: backup.savedAt } : t);
+        localStorage.setItem("udo_tour_index", JSON.stringify(updated));
+      }
+    } catch (e) { console.warn("localStorage backup failed", e); }
+  };
+
   const saveTour = async () => {
     setSaving(true);
     const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues };
+    // Always save to localStorage first — instant, never fails
+    saveToLocal(activeTourId, tourName, payload);
     try {
       if (activeTourId) {
-        await fetch('/api/tours', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        const res = await fetch('/api/tours', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: activeTourId, name: tourName, artist_name: artist.name, status: artist.status, payload }) });
+        if (!res.ok) throw new Error("Save failed");
       } else {
         const res = await fetch('/api/tours', { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: tourName, artist_name: artist.name, status: artist.status, payload }) });
+        if (!res.ok) throw new Error("Save failed");
         const { tour } = await res.json();
-        if (tour) setActiveTourId(tour.id);
+        if (tour) {
+          setActiveTourId(tour.id);
+          saveToLocal(tour.id, tourName, payload); // re-save with real ID
+        }
       }
       setSaveMsg("✅ Saved");
       loadTourList();
-    } catch (e) { setSaveMsg("❌ Save failed"); }
+    } catch (e) {
+      setSaveMsg("⚠ DB save failed — backed up locally");
+    }
     setSaving(false);
     setTimeout(() => setSaveMsg(""), 3000);
   };
@@ -1120,9 +1147,12 @@ export default function App() {
     if (!activeTourId) return;
     setAutoSaveStatus("saving");
     const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues };
+    // Always back up locally first
+    saveToLocal(activeTourId, tourName, payload);
     try {
-      await fetch('/api/tours', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      const res = await fetch('/api/tours', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: activeTourId, name: tourName, artist_name: artist.name, status: artist.status, payload }) });
+      if (!res.ok) throw new Error("autosave failed");
       setAutoSaveStatus("saved");
       setTimeout(() => setAutoSaveStatus(""), 2000);
     } catch (e) {
