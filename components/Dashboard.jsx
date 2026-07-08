@@ -3137,33 +3137,48 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
 }
 
 // ─── SHOW BY SHOW TAB ─────────────────────────────────────────────────────
-// ─── NUMFIELD — uncontrolled number input that doesn't fight the cursor ────
-function NumField({ value, onChange, style, placeholder = "0", step }) {
-  const ref = React.useRef(null);
-  // Sync external value to input only when not focused
+// ─── NUMFIELD — text input that behaves like a number field ────────────────
+function NumField({ value, onChange, style, placeholder = "0" }) {
+  const [localVal, setLocalVal] = React.useState(value ? String(value) : "");
+  const focused = React.useRef(false);
+
   React.useEffect(() => {
-    if (ref.current && document.activeElement !== ref.current) {
-      ref.current.value = value || "";
+    if (!focused.current) {
+      setLocalVal(value ? String(value) : "");
     }
   }, [value]);
+
+  const commit = (raw) => {
+    const n = parseFloat(raw.replace(/[^0-9.-]/g, ""));
+    onChange(isNaN(n) ? 0 : n);
+  };
+
   return (
     <input
-      ref={ref}
-      type="number"
-      step={step}
-      defaultValue={value || ""}
+      type="text"
+      inputMode="decimal"
+      value={localVal}
       placeholder={placeholder}
-      onFocus={e => e.target.select()}
+      onFocus={e => {
+        focused.current = true;
+        e.target.select();
+      }}
       onBlur={e => {
-        const n = parseFloat(e.target.value);
-        onChange(isNaN(n) ? 0 : n);
+        focused.current = false;
+        commit(e.target.value);
+        const n = parseFloat(e.target.value.replace(/[^0-9.-]/g, ""));
+        setLocalVal(isNaN(n) ? "" : String(n));
+      }}
+      onChange={e => {
+        const raw = e.target.value;
+        if (/^-?[0-9]*\.?[0-9]*$/.test(raw) || raw === "" || raw === "-") {
+          setLocalVal(raw);
+        }
       }}
       onKeyDown={e => {
         if (e.key === "Enter") {
-          const n = parseFloat(e.target.value);
-          onChange(isNaN(n) ? 0 : n);
-          // Move to next input
-          const inputs = Array.from(document.querySelectorAll('input[type="number"]'));
+          commit(e.target.value);
+          const inputs = Array.from(document.querySelectorAll('input[type="text"][inputmode="decimal"]'));
           const idx = inputs.indexOf(e.target);
           if (idx >= 0 && inputs[idx + 1]) inputs[idx + 1].focus();
         }
