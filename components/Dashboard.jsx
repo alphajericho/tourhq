@@ -3345,9 +3345,27 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
   const depositBalance = totalDepositsOwed - totalDepositsPaid;
 
   const iS = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, padding: "5px 7px", fontSize: 12, width: "100%" };
-  const numInput = (i, key, val) => (
-    <input type="number" value={val || ""} onChange={e => updShow(i, key, +e.target.value)} style={iS} placeholder="0" />
-  );
+  const numInput = (i, key, val) => {
+    const [localVal, setLocalVal] = React.useState(val === 0 || val === null || val === undefined ? "" : String(val));
+    React.useEffect(() => {
+      setLocalVal(val === 0 || val === null || val === undefined ? "" : String(val));
+    }, [val]);
+    return (
+      <input
+        type="number"
+        value={localVal}
+        placeholder="0"
+        onChange={e => {
+          setLocalVal(e.target.value);
+          const n = parseFloat(e.target.value);
+          updShow(i, key, isNaN(n) ? 0 : n);
+        }}
+        onFocus={e => e.target.select()}
+        onBlur={() => { if (localVal === "") { setLocalVal(""); updShow(i, key, 0); } }}
+        style={iS}
+      />
+    );
+  };
 
   const CostRow = ({ label, i, field, val }) => (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 6, alignItems: "center", marginBottom: 4 }}>
@@ -3527,7 +3545,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                   <CalendarPicker value={s.date} onChange={v => updShow(activeCard,"date",v)} /></div>
                 <div>
                   <Label>Capacity</Label>
-                  <input type="number" value={s.cap || ""} onChange={e => updShow(activeCard,"cap",+e.target.value)} style={iS} placeholder="0" />
+                  <input type="number" value={s.cap || ""} onChange={e => updShow(activeCard,"cap",+e.target.value)} onFocus={e=>e.target.select()} style={iS} placeholder="0" />
                   {s.venue && VENUE_DB.find(v => v.name === s.venue) && (
                     <div style={{ fontSize:10, color:C.muted, marginTop:2, fontStyle:"italic" }}>Auto-filled from venue database</div>
                   )}
