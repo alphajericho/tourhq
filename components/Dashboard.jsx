@@ -3345,27 +3345,24 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
   const depositBalance = totalDepositsOwed - totalDepositsPaid;
 
   const iS = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, padding: "5px 7px", fontSize: 12, width: "100%" };
-  const numInput = (i, key, val) => {
-    const [localVal, setLocalVal] = React.useState(val === 0 || val === null || val === undefined ? "" : String(val));
-    React.useEffect(() => {
-      setLocalVal(val === 0 || val === null || val === undefined ? "" : String(val));
-    }, [val]);
-    return (
-      <input
-        type="number"
-        value={localVal}
-        placeholder="0"
-        onChange={e => {
-          setLocalVal(e.target.value);
-          const n = parseFloat(e.target.value);
-          updShow(i, key, isNaN(n) ? 0 : n);
-        }}
-        onFocus={e => e.target.select()}
-        onBlur={() => { if (localVal === "") { setLocalVal(""); updShow(i, key, 0); } }}
-        style={iS}
-      />
-    );
-  };
+  const numInput = (i, key, val) => (
+    <input
+      type="number"
+      defaultValue={val || ""}
+      placeholder="0"
+      onFocus={e => e.target.select()}
+      onBlur={e => {
+        const n = parseFloat(e.target.value);
+        updShow(i, key, isNaN(n) ? 0 : n);
+      }}
+      onChange={e => {
+        const n = parseFloat(e.target.value);
+        if (!isNaN(n)) updShow(i, key, n);
+      }}
+      style={iS}
+      key={`${i}-${key}-${val}`}
+    />
+  );
 
   const CostRow = ({ label, i, field, val }) => (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 6, alignItems: "center", marginBottom: 4 }}>
@@ -3401,7 +3398,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
         {showData.map((s, i) => (
           <div key={i}>
             {isInput
-              ? <input type="number" value={s[field] || ""} onChange={e => updShow(i, field, +e.target.value)} style={{ ...iS, padding: "3px 5px", fontSize: 11 }} placeholder="0" />
+              ? <input type="number" value={s[field] || ""} onFocus={e=>e.target.select()} onChange={e => updShow(i, field, +e.target.value)} style={{ ...iS, padding: "3px 5px", fontSize: 11 }} placeholder="0" />
               : <span style={{ fontSize: 11, color: color || C.text }}>{values ? fmt(values[i]) : "—"}</span>
             }
           </div>
@@ -3580,7 +3577,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                         <div>
                           <Label>Allocation (this show)</Label>
                           <input type="number" value={alloc || ""} placeholder={String(tt.allocation||0)}
-                            onChange={e => updShow(activeCard, showKey, +e.target.value)} style={iS} />
+                            onFocus={e=>e.target.select()} onChange={e => updShow(activeCard, showKey, +e.target.value)} style={iS} />
                         </div>
                         <div>
                           <Label>Forecast %</Label>
@@ -3725,7 +3722,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                     <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                       <span style={{ fontSize:10, color:C.muted }}>Override:</span>
                       <input type="number" value={s.soldOverride ?? ""} placeholder="auto"
-                        onChange={e => updShow(activeCard, "soldOverride", e.target.value === "" ? null : +e.target.value)}
+                        onFocus={e=>e.target.select()} onChange={e => updShow(activeCard, "soldOverride", e.target.value === "" ? null : +e.target.value)}
                         style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:4, color:C.text, padding:"3px 6px", fontSize:11, width:70 }} />
                     </div>
                   </div>
