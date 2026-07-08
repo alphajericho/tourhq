@@ -3137,6 +3137,42 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
 }
 
 // ─── SHOW BY SHOW TAB ─────────────────────────────────────────────────────
+// ─── NUMFIELD — uncontrolled number input that doesn't fight the cursor ────
+function NumField({ value, onChange, style, placeholder = "0", step }) {
+  const ref = React.useRef(null);
+  // Sync external value to input only when not focused
+  React.useEffect(() => {
+    if (ref.current && document.activeElement !== ref.current) {
+      ref.current.value = value || "";
+    }
+  }, [value]);
+  return (
+    <input
+      ref={ref}
+      type="number"
+      step={step}
+      defaultValue={value || ""}
+      placeholder={placeholder}
+      onFocus={e => e.target.select()}
+      onBlur={e => {
+        const n = parseFloat(e.target.value);
+        onChange(isNaN(n) ? 0 : n);
+      }}
+      onKeyDown={e => {
+        if (e.key === "Enter") {
+          const n = parseFloat(e.target.value);
+          onChange(isNaN(n) ? 0 : n);
+          // Move to next input
+          const inputs = Array.from(document.querySelectorAll('input[type="number"]'));
+          const idx = inputs.indexOf(e.target);
+          if (idx >= 0 && inputs[idx + 1]) inputs[idx + 1].focus();
+        }
+      }}
+      style={style}
+    />
+  );
+}
+
 function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTicketingRecords, ticketTypes, vipPackageCost, showData, setShowData, national, setNational, vipItems, setVipItems, deposits, setDeposits, blankSBShow }) {
 
   // ── ADD/REMOVE SHOWS DIRECTLY — uses blankSBShow() from App level ──
@@ -3346,22 +3382,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
 
   const iS = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, padding: "5px 7px", fontSize: 12, width: "100%" };
   const numInput = (i, key, val) => (
-    <input
-      type="number"
-      defaultValue={val || ""}
-      placeholder="0"
-      onFocus={e => e.target.select()}
-      onBlur={e => {
-        const n = parseFloat(e.target.value);
-        updShow(i, key, isNaN(n) ? 0 : n);
-      }}
-      onChange={e => {
-        const n = parseFloat(e.target.value);
-        if (!isNaN(n)) updShow(i, key, n);
-      }}
-      style={iS}
-      key={`${i}-${key}-${val}`}
-    />
+    <NumField value={val} onChange={n => updShow(i, key, n)} style={iS} />
   );
 
   const CostRow = ({ label, i, field, val }) => (
@@ -3542,7 +3563,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                   <CalendarPicker value={s.date} onChange={v => updShow(activeCard,"date",v)} /></div>
                 <div>
                   <Label>Capacity</Label>
-                  <input type="number" value={s.cap || ""} onChange={e => updShow(activeCard,"cap",+e.target.value)} onFocus={e=>e.target.select()} style={iS} placeholder="0" />
+                  <NumField value={s.cap || ""} onChange={n => updShow(activeCard, "cap", n)} style={iS} />
                   {s.venue && VENUE_DB.find(v => v.name === s.venue) && (
                     <div style={{ fontSize:10, color:C.muted, marginTop:2, fontStyle:"italic" }}>Auto-filled from venue database</div>
                   )}
@@ -3604,11 +3625,11 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
                 <div>
                   <Label>VIP Packages Sold</Label>
-                  <input type="number" value={s.vipSold || ""} onChange={e=>updShow(activeCard,"vipSold",+e.target.value)} style={iS} placeholder="0" />
+                  <NumField value={s.vipSold || ""} onChange={n => updShow(activeCard, "vipSold", n)} style={iS} />
                 </div>
                 <div>
                   <Label>VIP Package Price (AUD)</Label>
-                  <input type="number" value={s.catBPrice || ""} onChange={e=>updShow(activeCard,"catBPrice",+e.target.value)} style={iS} placeholder="0" />
+                  <NumField value={s.catBPrice || ""} onChange={n => updShow(activeCard, "catBPrice", n)} style={iS} />
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
