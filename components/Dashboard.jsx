@@ -3176,9 +3176,11 @@ function NumField({ value, onChange, style, placeholder = "0" }) {
         }
       }}
       onKeyDown={e => {
-        if (e.key === "Enter") {
+        if (e.key === "Enter" || e.key === "Tab") {
           commit(e.target.value);
-          const inputs = Array.from(document.querySelectorAll('input[type="text"][inputmode="decimal"]'));
+          if (e.key === "Tab") return; // let browser handle tab naturally
+          e.preventDefault();
+          const inputs = Array.from(document.querySelectorAll('input[type="text"][inputmode="decimal"], input[type="text"]'));
           const idx = inputs.indexOf(e.target);
           if (idx >= 0 && inputs[idx + 1]) inputs[idx + 1].focus();
         }
