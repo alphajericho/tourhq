@@ -3160,7 +3160,7 @@ function NumField({ value, onChange, style, placeholder = "0" }) {
   }, [value]);
 
   const commit = (raw) => {
-    const n = parseFloat(raw.replace(/[^0-9.-]/g, ""));
+    const n = parseFloat(String(raw).replace(/[^0-9.-]/g, ""));
     onChange(isNaN(n) ? 0 : n);
   };
 
@@ -3177,7 +3177,7 @@ function NumField({ value, onChange, style, placeholder = "0" }) {
       onBlur={e => {
         focused.current = false;
         commit(e.target.value);
-        const n = parseFloat(e.target.value.replace(/[^0-9.-]/g, ""));
+        const n = parseFloat(String(e.target.value).replace(/[^0-9.-]/g, ""));
         setLocalVal(isNaN(n) ? "" : String(n));
       }}
       onChange={e => {
@@ -3187,13 +3187,17 @@ function NumField({ value, onChange, style, placeholder = "0" }) {
         }
       }}
       onKeyDown={e => {
-        if (e.key === "Enter" || e.key === "Tab") {
-          commit(e.target.value);
-          if (e.key === "Tab") return; // let browser handle tab naturally
+        if (e.key === "Enter") {
           e.preventDefault();
-          const inputs = Array.from(document.querySelectorAll('input[type="text"][inputmode="decimal"], input[type="text"]'));
-          const idx = inputs.indexOf(e.target);
-          if (idx >= 0 && inputs[idx + 1]) inputs[idx + 1].focus();
+          commit(e.target.value);
+          // Move to next focusable input
+          const all = Array.from(document.querySelectorAll('input, select, textarea, button'));
+          const idx = all.indexOf(e.target);
+          if (idx >= 0 && all[idx + 1]) all[idx + 1].focus();
+        }
+        // Tab: commit value but let browser handle focus movement naturally
+        if (e.key === "Tab") {
+          commit(e.target.value);
         }
       }}
       style={style}
