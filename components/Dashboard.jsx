@@ -3149,7 +3149,7 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
 
 // ─── SHOW BY SHOW TAB ─────────────────────────────────────────────────────
 // ─── NUMFIELD — text input that behaves like a number field ────────────────
-function NumField({ value, onChange, style, placeholder = "0" }) {
+function NumField({ value, onChange, style, placeholder = "0", tabIndex }) {
   const [localVal, setLocalVal] = React.useState(value ? String(value) : "");
   const focused = React.useRef(false);
 
@@ -3170,6 +3170,7 @@ function NumField({ value, onChange, style, placeholder = "0" }) {
       inputMode="decimal"
       value={localVal}
       placeholder={placeholder}
+      tabIndex={tabIndex}
       onFocus={e => {
         focused.current = true;
         e.target.select();
@@ -3445,20 +3446,24 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
       </div>
     );
 
-    const DataRow = ({ label, values, total, color, isInput, field }) => (
-      <div style={{ display: "grid", gridTemplateColumns: colW, gap: 4, padding: "4px 8px", borderTop: `1px solid ${C.border}`, alignItems: "center" }}>
-        <span style={{ fontSize: 11, color: C.muted }}>{label}</span>
-        {showData.map((s, i) => (
-          <div key={i}>
-            {isInput
-              ? <NumField value={s[field]} onChange={n => updShow(i, field, n)} style={{ ...iS, padding: "3px 5px", fontSize: 11 }} />
-              : <span style={{ fontSize: 11, color: color || C.text }}>{values ? fmt(values[i]) : "—"}</span>
-            }
-          </div>
-        ))}
-        <span style={{ fontSize: 11, fontWeight: 700, color: color || C.text }}>{fmt(total)}</span>
-      </div>
-    );
+    let tabCounter = 100;
+    const DataRow = ({ label, values, total, color, isInput, field }) => {
+      const tabs = isInput ? showData.map(() => tabCounter++) : [];
+      return (
+        <div style={{ display: "grid", gridTemplateColumns: colW, gap: 4, padding: "4px 8px", borderTop: `1px solid ${C.border}`, alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: C.muted }}>{label}</span>
+          {showData.map((s, i) => (
+            <div key={i}>
+              {isInput
+                ? <NumField value={s[field]} onChange={n => updShow(i, field, n)} style={{ ...iS, padding: "3px 5px", fontSize: 11 }} tabIndex={tabs[i]} />
+                : <span style={{ fontSize: 11, color: color || C.text }}>{values ? fmt(values[i]) : "—"}</span>
+              }
+            </div>
+          ))}
+          <span style={{ fontSize: 11, fontWeight: 700, color: color || C.text }}>{fmt(total)}</span>
+        </div>
+      );
+    };
 
     const TotalRow = ({ label, values, total, color }) => (
       <div style={{ display: "grid", gridTemplateColumns: colW, gap: 4, padding: "7px 8px", borderTop: `2px solid ${C.border}`, alignItems: "center", background: C.panel }}>
