@@ -379,7 +379,7 @@ function DealBuilder({ deal, onChange, fx, compact }) {
           </div>
           <div>
             <Label>{d.type === "VS Deal" ? "Guarantee" : "Fee"}</Label>
-            <input type="number" value={d.guarantee||""} placeholder="0"
+            <input type="text" inputMode="decimal" value={d.guarantee||""} placeholder="0"
               onChange={e => onChange({ ...d, guarantee: +e.target.value })} style={iS} />
           </div>
         </div>
@@ -390,7 +390,7 @@ function DealBuilder({ deal, onChange, fx, compact }) {
         <div style={{ marginBottom: 12 }}>
           <Label>{d.type === "VS Deal" ? "Artist % of Net (if higher than guarantee)" : d.type === "Door Deal" ? "Artist % of Door" : "Artist % of Net Box Office"}</Label>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input type="number" value={d.pct||""} placeholder="70" min="0" max="100"
+            <input type="text" inputMode="decimal" value={d.pct||""} placeholder="70" min="0" max="100"
               onChange={e => onChange({ ...d, pct: +e.target.value })} style={{ ...iS, width: 100 }} />
             <span style={{ color: C.muted, fontSize: 13 }}>%</span>
             <span style={{ color: C.muted, fontSize: 11 }}>Promoter keeps {100 - (d.pct||0)}%</span>
@@ -434,13 +434,13 @@ function DealBuilder({ deal, onChange, fx, compact }) {
             <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 32px", gap: 6, marginBottom: 6, alignItems: "center" }}>
               <div>
                 <Label style={{ fontSize: 10 }}>{d.type === "Stepped %" ? `Threshold ${i+1} (tickets sold)` : `Tier ${i+1} ($ revenue)`}</Label>
-                <input type="number" value={step.threshold||""} placeholder={i===0?"0":"e.g. 500"}
+                <input type="text" inputMode="decimal" value={step.threshold||""} placeholder={i===0?"0":"e.g. 500"}
                   onChange={e => updStep(i, "threshold", +e.target.value)} style={iS} />
               </div>
               <div>
                 <Label style={{ fontSize: 10 }}>{d.type === "Stepped %" ? "Artist %" : "Artist $ (above tier)"}</Label>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <input type="number" value={step.value||""} placeholder={d.type === "Stepped %" ? "70" : "0"}
+                  <input type="text" inputMode="decimal" value={step.value||""} placeholder={d.type === "Stepped %" ? "70" : "0"}
                     onChange={e => updStep(i, "value", +e.target.value)} style={iS} />
                   <span style={{ color: C.muted, fontSize: 12, whiteSpace:"nowrap" }}>{d.type === "Stepped %" ? "%" : "$"}</span>
                 </div>
@@ -608,23 +608,23 @@ function ShowRow({ show, idx, onChange, onRemove, venues, onAddVenue }) {
         </div>
         <div>
           <Label>Capacity</Label>
-          <input type="number" value={show.cap || ""} onChange={e => onChange(idx, { ...show, cap: +e.target.value })} style={iS} />
+          <input type="text" inputMode="decimal" value={show.cap || ""} onChange={e => onChange(idx, { ...show, cap: +e.target.value })} style={iS} />
         </div>
         <div>
           <Label>Ticket Price (gross)</Label>
-          <input type="number" value={show.ticketPrice || ""} onChange={e => onChange(idx, { ...show, ticketPrice: +e.target.value })} style={iS} />
+          <input type="text" inputMode="decimal" value={show.ticketPrice || ""} onChange={e => onChange(idx, { ...show, ticketPrice: +e.target.value })} style={iS} />
         </div>
         <div>
           <Label>Flat Hire ($)</Label>
-          <input type="number" value={show.flatHire || ""} onChange={e => onChange(idx, { ...show, flatHire: +e.target.value })} style={iS} placeholder="0" />
+          <input type="text" inputMode="decimal" value={show.flatHire || ""} onChange={e => onChange(idx, { ...show, flatHire: +e.target.value })} style={iS} placeholder="0" />
         </div>
         <div>
           <Label>Per Head ($)</Label>
-          <input type="number" step="0.5" value={show.perHead || ""} onChange={e => onChange(idx, { ...show, perHead: +e.target.value })} style={iS} placeholder="5.50" />
+          <input type="text" inputMode="decimal" value={show.perHead || ""} onChange={e => onChange(idx, { ...show, perHead: +e.target.value })} style={iS} placeholder="5.50" />
         </div>
         <div>
           <Label>Forecast Attend %</Label>
-          <input type="number" value={show.attendPct ? Math.round(show.attendPct * 100) : ""} onChange={e => onChange(idx, { ...show, attendPct: (+e.target.value) / 100 })} style={iS} />
+          <input type="text" inputMode="decimal" value={show.attendPct ? Math.round(show.attendPct * 100) : ""} onChange={e => onChange(idx, { ...show, attendPct: (+e.target.value) / 100 })} style={iS} />
         </div>
         <div style={{ gridColumn: "2 / 4" }}>
           <Label>Notes (optional)</Label>
@@ -660,7 +660,7 @@ function ShowRow({ show, idx, onChange, onRemove, venues, onAddVenue }) {
             </div>
             <div>
               <Label>Capacity</Label>
-              <input type="number" value={customVenue.cap||""} onChange={e => setCustomVenue(v=>({...v,cap:+e.target.value}))}
+              <input type="text" inputMode="decimal" value={customVenue.cap||""} onChange={e => setCustomVenue(v=>({...v,cap:+e.target.value}))}
                 placeholder="0" style={iS} />
             </div>
             <div>
@@ -674,14 +674,14 @@ function ShowRow({ show, idx, onChange, onRemove, venues, onAddVenue }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr", gap: 8, marginBottom: 8 }}>
             <div>
               <Label>Flat Hire ($)</Label>
-              <input type="number" value={customVenue.hire||""} placeholder="0"
+              <input type="text" inputMode="decimal" value={customVenue.hire||""} placeholder="0"
                 disabled={customVenue.dealType==="door"}
                 onChange={e => setCustomVenue(v=>({...v,hire:+e.target.value}))}
                 style={{ ...iS, opacity: customVenue.dealType==="door" ? 0.4 : 1 }} />
             </div>
             <div>
               <Label>Per Head ($)</Label>
-              <input type="number" step="0.5" value={customVenue.perHead||""} placeholder="5.50"
+              <input type="text" inputMode="decimal" value={customVenue.perHead||""} placeholder="5.50"
                 onChange={e => setCustomVenue(v=>({...v,perHead:+e.target.value}))} style={iS} />
             </div>
             <div>
@@ -728,6 +728,17 @@ export default function App() {
   const [pendingName, setPendingName] = useState("");
   const [autoSaveStatus, setAutoSaveStatus] = useState(""); // "saving" | "saved" | "error" | ""
   const autoSaveTimer = useRef(null);
+  // Hide number input arrows globally
+  React.useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      input[type="text"] { -moz-appearance: textfield; }
+      input::-webkit-outer-spin-button,
+      input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
 
   const loadTourList = async () => {
     try {
@@ -1285,7 +1296,7 @@ export default function App() {
           {["USD","GBP","EUR"].map(cur => (
             <div key={cur} style={{ display:"flex", alignItems:"center", gap:6 }}>
               <span style={{ fontSize:11, color:C.muted }}>{cur}/AUD</span>
-              <input type="number" step="0.01" value={fx[cur] || ""}
+              <input type="text" inputMode="decimal" value={fx[cur] || ""}
                 onChange={e => setFx(f => ({...f, [cur]: +e.target.value}))}
                 style={{ width:60, background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 6px", fontSize:12 }} />
             </div>
@@ -1535,16 +1546,16 @@ export default function App() {
                                 {s.venueName}
                                 {s.isNewVenue && <span style={{ fontSize:10, color:C.accent, marginLeft:4 }}>NEW</span>}
                               </span>
-                              <input type="number" value={s.cap||""} placeholder="0"
+                              <input type="text" inputMode="decimal" value={s.cap||""} placeholder="0"
                                 onChange={e => setImportPreview(prev => prev.map((x,j) => j===i ? {...x,cap:+e.target.value} : x))}
                                 style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 6px", fontSize:12, width:"100%" }} />
-                              <input type="number" value={s.ticketPrice||""} placeholder="0"
+                              <input type="text" inputMode="decimal" value={s.ticketPrice||""} placeholder="0"
                                 onChange={e => setImportPreview(prev => prev.map((x,j) => j===i ? {...x,ticketPrice:+e.target.value} : x))}
                                 style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 6px", fontSize:12, width:"100%" }} />
-                              <input type="number" value={s.flatHire||""} placeholder="0"
+                              <input type="text" inputMode="decimal" value={s.flatHire||""} placeholder="0"
                                 onChange={e => setImportPreview(prev => prev.map((x,j) => j===i ? {...x,flatHire:+e.target.value} : x))}
                                 style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 6px", fontSize:12, width:"100%" }} />
-                              <input type="number" value={s.perHead||""} placeholder="5.5"
+                              <input type="text" inputMode="decimal" value={s.perHead||""} placeholder="5.5"
                                 onChange={e => setImportPreview(prev => prev.map((x,j) => j===i ? {...x,perHead:+e.target.value} : x))}
                                 style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 6px", fontSize:12, width:"100%" }} />
                               <button onClick={() => setImportPreview(prev => prev.filter((_,j) => j!==i))}
@@ -1699,7 +1710,7 @@ export default function App() {
                   <div>
                     <Label>Pax</Label>
                     <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                      <input type="number" value={p.perDiemPax || ""} placeholder={String(p.band + p.crew)}
+                      <input type="text" inputMode="decimal" value={p.perDiemPax || ""} placeholder={String(p.band + p.crew)}
                         onChange={e => setParty(x=>({...x, perDiemPax: +e.target.value || (p.band + p.crew)}))}
                         style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }} />
                     </div>
@@ -1713,7 +1724,7 @@ export default function App() {
                       <option value={p.pdRate && ![30,40,50,60,70].includes(p.pdRate) ? p.pdRate : 0}>Custom…</option>
                     </select>
                     {![30,40,50,60,70].includes(p.pdRate) && (
-                      <input type="number" value={p.pdRate || ""} placeholder="Custom rate"
+                      <input type="text" inputMode="decimal" value={p.pdRate || ""} placeholder="Custom rate"
                         onChange={e => setParty(x=>({...x, pdRate: +e.target.value}))}
                         style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"6px 10px", fontSize:12, width:"100%", marginTop:4 }} />
                     )}
@@ -1721,7 +1732,7 @@ export default function App() {
                   <div>
                     <Label>Show Days</Label>
                     <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                      <input type="number" value={p.pdShows || ""} placeholder={String(numShows)}
+                      <input type="text" inputMode="decimal" value={p.pdShows || ""} placeholder={String(numShows)}
                         onChange={e => setParty(x=>({...x, pdShows: +e.target.value || numShows}))}
                         style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }} />
                     </div>
@@ -1738,25 +1749,25 @@ export default function App() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   <div>
                     <Label>Catering / Show</Label>
-                    <input type="number" value={p.catering || ""} placeholder="0"
+                    <input type="text" inputMode="decimal" value={p.catering || ""} placeholder="0"
                       onChange={e => setParty(x=>({...x, catering: +e.target.value}))}
                       style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }} />
                   </div>
                   <div>
                     <Label>Shows</Label>
-                    <input type="number" value={p.cateringShows || ""} placeholder={String(numShows)}
+                    <input type="text" inputMode="decimal" value={p.cateringShows || ""} placeholder={String(numShows)}
                       onChange={e => setParty(x=>({...x, cateringShows: +e.target.value}))}
                       style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }} />
                   </div>
                   <div>
                     <Label>Hospitality Rider / Show</Label>
-                    <input type="number" value={p.riderCost || ""} placeholder="0"
+                    <input type="text" inputMode="decimal" value={p.riderCost || ""} placeholder="0"
                       onChange={e => setParty(x=>({...x, riderCost: +e.target.value}))}
                       style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }} />
                   </div>
                   <div>
                     <Label>Shows</Label>
-                    <input type="number" value={p.riderShows || ""} placeholder={String(numShows)}
+                    <input type="text" inputMode="decimal" value={p.riderShows || ""} placeholder={String(numShows)}
                       onChange={e => setParty(x=>({...x, riderShows: +e.target.value}))}
                       style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" }} />
                   </div>
@@ -1811,7 +1822,7 @@ export default function App() {
                         onChange={e => { const u=[...p.additionalProd]; u[i]={...u[i],label:e.target.value}; setParty(x=>({...x,additionalProd:u})); }}
                         style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:12 }} />
                     )}
-                    <input type="number" value={item.cost||""} placeholder="$"
+                    <input type="text" inputMode="decimal" value={item.cost||""} placeholder="$"
                       onChange={e => { const u=[...p.additionalProd]; u[i]={...u[i],cost:+e.target.value}; setParty(x=>({...x,additionalProd:u})); }}
                       style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13 }} />
                     <button onClick={() => setParty(x=>({...x, additionalProd: x.additionalProd.filter((_,j)=>j!==i)}))}
@@ -1947,7 +1958,7 @@ export default function App() {
                     <Label>Research: Avg overseas gross per show ({artist.dealCurrency})</Label>
                     <div style={{ display: "flex", alignItems: "center", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
                       <span style={{ padding: "0 8px", color: C.muted, fontSize: 13 }}>{artist.dealCurrency}</span>
-                      <input type="number" value={researchOverseasGross || ""}
+                      <input type="text" inputMode="decimal" value={researchOverseasGross || ""}
                         onChange={e => setResearchOverseasGross(+e.target.value)}
                         style={{ background: "transparent", border: "none", outline: "none", color: C.text, padding: "8px 10px", width: "100%", fontSize: 14 }} />
                     </div>
@@ -2220,7 +2231,7 @@ function VenueForm({ initial, onSave, onCancel, title }) {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr", gap:10, marginBottom:10 }}>
         <div>
           <Label>Capacity</Label>
-          <input type="number" placeholder="0" value={v.cap||""} onChange={e=>setV(x=>({...x,cap:+e.target.value}))} style={iS} />
+          <input type="text" inputMode="decimal" placeholder="0" value={v.cap||""} onChange={e=>setV(x=>({...x,cap:+e.target.value}))} style={iS} />
         </div>
         <div>
           <Label>Deal Type</Label>
@@ -2232,19 +2243,19 @@ function VenueForm({ initial, onSave, onCancel, title }) {
         </div>
         <div>
           <Label>Flat Hire ($)</Label>
-          <input type="number" placeholder="0" value={v.hire||""} disabled={v.dealType==="door"||v.dealType==="perhead"}
+          <input type="text" inputMode="decimal" placeholder="0" value={v.hire||""} disabled={v.dealType==="door"||v.dealType==="perhead"}
             onChange={e=>setV(x=>({...x,hire:+e.target.value}))}
             style={{ ...iS, opacity: (v.dealType==="door"||v.dealType==="perhead") ? 0.4 : 1 }} />
         </div>
         <div>
           <Label>Per Head ($)</Label>
-          <input type="number" step="0.5" placeholder="5.50" value={v.perHead||""} disabled={v.dealType==="flat"}
+          <input type="text" inputMode="decimal" placeholder="5.50" value={v.perHead||""} disabled={v.dealType==="flat"}
             onChange={e=>setV(x=>({...x,perHead:+e.target.value}))}
             style={{ ...iS, opacity: v.dealType==="flat" ? 0.4 : 1 }} />
         </div>
         <div>
           <Label>Production ($)</Label>
-          <input type="number" placeholder="0" value={v.production||""} onChange={e=>setV(x=>({...x,production:+e.target.value}))} style={iS} />
+          <input type="text" inputMode="decimal" placeholder="0" value={v.production||""} onChange={e=>setV(x=>({...x,production:+e.target.value}))} style={iS} />
         </div>
       </div>
 
@@ -2731,7 +2742,7 @@ function ResearchTab() {
           ].map(([lbl,key])=>(
             <div key={key}>
               <Label>{lbl}</Label>
-              <input type="number" value={r[key]||""} onChange={e=>setR(x=>({...x,[key]:e.target.value}))} style={iS} placeholder="0" />
+              <input type="text" inputMode="decimal" value={r[key]||""} onChange={e=>setR(x=>({...x,[key]:e.target.value}))} style={iS} placeholder="0" />
             </div>
           ))}
         </div>
@@ -2959,12 +2970,12 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
             <div style={{ display:"grid", gridTemplateColumns: t.type === "VIPWT" ? "repeat(6,1fr)" : "repeat(5,1fr)", gap: 10, marginBottom: 12 }}>
               <div>
                 <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Gross Sale Price</div>
-                <input type="number" value={t.grossPrice || ""} onChange={e => updType(t.id, "grossPrice", +e.target.value)}
+                <input type="text" inputMode="decimal" value={t.grossPrice || ""} onChange={e => updType(t.id, "grossPrice", +e.target.value)}
                   placeholder="0" style={iS} />
               </div>
               <div>
                 <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Booking / Venue Fees</div>
-                <input type="number" value={t.fees || ""} onChange={e => updType(t.id, "fees", +e.target.value)}
+                <input type="text" inputMode="decimal" value={t.fees || ""} onChange={e => updType(t.id, "fees", +e.target.value)}
                   placeholder="10" style={iS} />
                 <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>Default $10 est.</div>
               </div>
@@ -3010,12 +3021,12 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
               </div>
               <div>
                 <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Allocation</div>
-                <input type="number" value={t.allocation || ""} onChange={e => updType(t.id, "allocation", +e.target.value)}
+                <input type="text" inputMode="decimal" value={t.allocation || ""} onChange={e => updType(t.id, "allocation", +e.target.value)}
                   placeholder="0" style={iS} />
               </div>
               <div>
                 <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Forecast %</div>
-                <input type="number" value={t.forecast ? Math.round(t.forecast*100) : ""} onChange={e => updType(t.id, "forecast", (+e.target.value)/100)}
+                <input type="text" inputMode="decimal" value={t.forecast ? Math.round(t.forecast*100) : ""} onChange={e => updType(t.id, "forecast", (+e.target.value)/100)}
                   style={iS} />
                 {t.allocation > 0 && (
                   <div style={{ fontSize:10, color:C.yellow, marginTop:2 }}>
@@ -3026,7 +3037,7 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
               </div>
               <div>
                 <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Pax / Ticket</div>
-                <input type="number" value={t.paxPer || ""} placeholder="1"
+                <input type="text" inputMode="decimal" value={t.paxPer || ""} placeholder="1"
                   onChange={e => updType(t.id, "paxPer", Math.max(1, +e.target.value || 1))}
                   style={iS} />
                 <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>
@@ -3076,13 +3087,13 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
             {[["Poster","poster"],["Laminate","laminate"],["Lanyard","lanyard"],["Other","other"]].map(([label,key]) => (
               <div key={key}>
                 <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>{label}</div>
-                <input type="number" value={vipPackageCost[key] || ""} onChange={e => setVipPackageCost(p => ({...p, [key]: +e.target.value}))}
+                <input type="text" inputMode="decimal" value={vipPackageCost[key] || ""} onChange={e => setVipPackageCost(p => ({...p, [key]: +e.target.value}))}
                   placeholder="0" style={iS} />
               </div>
             ))}
             <div>
               <div style={{ fontSize:11, color:C.muted, marginBottom:4, textTransform:"uppercase" }}>Prep / Fulfilment %</div>
-              <input type="number" value={vipPackageCost.prepPct || ""} onChange={e => setVipPackageCost(p => ({...p, prepPct: +e.target.value}))}
+              <input type="text" inputMode="decimal" value={vipPackageCost.prepPct || ""} onChange={e => setVipPackageCost(p => ({...p, prepPct: +e.target.value}))}
                 placeholder="10" style={iS} />
             </div>
           </div>
@@ -3412,7 +3423,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
   const NatRow = ({ label, field }) => (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 6, alignItems: "center", marginBottom: 6 }}>
       <span style={{ fontSize: 12, color: C.muted }}>{label}</span>
-      <input type="number" value={national[field] || ""} onChange={e => setNational(n => ({ ...n, [field]: +e.target.value }))}
+      <input type="text" inputMode="decimal" value={national[field] || ""} onChange={e => setNational(n => ({ ...n, [field]: +e.target.value }))}
         style={iS} placeholder="0" />
     </div>
   );
@@ -3436,7 +3447,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
         {showData.map((s, i) => (
           <div key={i}>
             {isInput
-              ? <input type="number" value={s[field] || ""} onFocus={e=>e.target.select()} onChange={e => updShow(i, field, +e.target.value)} style={{ ...iS, padding: "3px 5px", fontSize: 11 }} placeholder="0" />
+              ? <NumField value={s[field]} onChange={n => updShow(i, field, n)} style={{ ...iS, padding: "3px 5px", fontSize: 11 }} />
               : <span style={{ fontSize: 11, color: color || C.text }}>{values ? fmt(values[i]) : "—"}</span>
             }
           </div>
@@ -3614,12 +3625,12 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                         <div>
                           <Label>Allocation (this show)</Label>
-                          <input type="number" value={alloc || ""} placeholder={String(tt.allocation||0)}
+                          <input type="text" inputMode="decimal" value={alloc || ""} placeholder={String(tt.allocation||0)}
                             onFocus={e=>e.target.select()} onChange={e => updShow(activeCard, showKey, +e.target.value)} style={iS} />
                         </div>
                         <div>
                           <Label>Forecast %</Label>
-                          <input type="number" value={fc ? Math.round(fc*100) : ""} onChange={e => updShow(activeCard, fcKey, (+e.target.value)/100)} style={iS} placeholder="0" />
+                          <input type="text" inputMode="decimal" value={fc ? Math.round(fc*100) : ""} onChange={e => updShow(activeCard, fcKey, (+e.target.value)/100)} style={iS} placeholder="0" />
                           {alloc > 0 && <div style={{ fontSize:10, color:C.yellow, marginTop:2 }}>= {Math.round(alloc*fc).toLocaleString()} tickets</div>}
                         </div>
                       </div>
@@ -3759,7 +3770,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>🎫 Live Ticket Sales</div>
                     <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                       <span style={{ fontSize:10, color:C.muted }}>Override:</span>
-                      <input type="number" value={s.soldOverride ?? ""} placeholder="auto"
+                      <input type="text" inputMode="decimal" value={s.soldOverride ?? ""} placeholder="auto"
                         onFocus={e=>e.target.select()} onChange={e => updShow(activeCard, "soldOverride", e.target.value === "" ? null : +e.target.value)}
                         style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:4, color:C.text, padding:"3px 6px", fontSize:11, width:70 }} />
                     </div>
@@ -4051,7 +4062,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
           ].map(([lbl,field])=>(
             <div key={field}>
               <Label>{lbl}</Label>
-              <input type="number" value={national[field]||""} onChange={e=>setNational(n=>({...n,[field]:+e.target.value}))}
+              <input type="text" inputMode="decimal" value={national[field]||""} onChange={e=>setNational(n=>({...n,[field]:+e.target.value}))}
                 style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", width:"100%", fontSize:13 }} placeholder="0" />
             </div>
           ))}
@@ -4063,7 +4074,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                 style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.accent, padding:"7px 8px", fontSize:13, fontWeight:700, cursor:"pointer" }}>
                 {["AUD","USD","GBP","EUR"].map(cur=><option key={cur} value={cur}>{cur}</option>)}
               </select>
-              <input type="number" value={national.artistFee||""} onChange={e=>setNational(n=>({...n,artistFee:+e.target.value}))}
+              <input type="text" inputMode="decimal" value={national.artistFee||""} onChange={e=>setNational(n=>({...n,artistFee:+e.target.value}))}
                 style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", flex:1, fontSize:13 }} placeholder="0" />
             </div>
             {national.artistFeeCurrency && national.artistFeeCurrency !== "AUD" && national.artistFee > 0 && (
@@ -4120,7 +4131,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                 </select>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ fontSize:12, color:C.muted }}>$</span>
-                  <input type="number" value={item.cost||""} placeholder="0"
+                  <input type="text" inputMode="decimal" value={item.cost||""} placeholder="0"
                     onChange={e=>setVipItems(v=>v.map((x,i)=>i===idx?{...x,cost:+e.target.value}:x))}
                     style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"5px 8px", fontSize:12, width:"100%" }} />
                 </div>
@@ -4190,7 +4201,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
                     style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:4, color:C.text, padding:"4px 7px", fontSize:12, width:"100%" }} />
                   <div style={{ display:"flex", alignItems:"center", gap:3 }}>
                     <span style={{ fontSize:11, color:C.muted }}>$</span>
-                    <input type="number" value={dep.amount||""} onChange={e=>updDeposit(dep.id,"amount",+e.target.value)}
+                    <input type="text" inputMode="decimal" value={dep.amount||""} onChange={e=>updDeposit(dep.id,"amount",+e.target.value)}
                       style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:4, color:C.text, padding:"4px 5px", fontSize:12, width:"100%" }} />
                   </div>
                   <CalendarPicker value={dep.dueDate} onChange={v=>updDeposit(dep.id,"dueDate",v)} />
@@ -4218,7 +4229,7 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
               </div>
               <div>
                 <Label>Amount ($AUD)</Label>
-                <input type="number" value={newDeposit.amount||""} placeholder="0" onChange={e=>setNewDeposit(d=>({...d,amount:+e.target.value}))}
+                <input type="text" inputMode="decimal" value={newDeposit.amount||""} placeholder="0" onChange={e=>setNewDeposit(d=>({...d,amount:+e.target.value}))}
                   style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"6px 8px", fontSize:13, width:"100%" }} />
               </div>
               <div>
@@ -4469,13 +4480,13 @@ function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingR
                   <CalendarPicker value={r.showDate} onChange={v => updRecord(activeShow, "showDate", v)} />
                 </div>
                 <div><Label>Ticket Price (AUD)</Label>
-                  <input type="number" value={r.ticketPrice || ""} onChange={e => updRecord(activeShow, "ticketPrice", +e.target.value)} style={iS} placeholder="0" />
+                  <input type="text" inputMode="decimal" value={r.ticketPrice || ""} onChange={e => updRecord(activeShow, "ticketPrice", +e.target.value)} style={iS} placeholder="0" />
                 </div>
                 <div><Label>Capacity</Label>
-                  <input type="number" value={r.cap || ""} onChange={e => updRecord(activeShow, "cap", +e.target.value)} style={iS} placeholder="0" />
+                  <input type="text" inputMode="decimal" value={r.cap || ""} onChange={e => updRecord(activeShow, "cap", +e.target.value)} style={iS} placeholder="0" />
                 </div>
                 <div><Label>VIP Limit</Label>
-                  <input type="number" value={r.vipLimit || ""} onChange={e => updRecord(activeShow, "vipLimit", +e.target.value)} style={iS} placeholder="0" />
+                  <input type="text" inputMode="decimal" value={r.vipLimit || ""} onChange={e => updRecord(activeShow, "vipLimit", +e.target.value)} style={iS} placeholder="0" />
                 </div>
               </div>
                 <div style={{ marginTop: 10 }}>
@@ -4628,7 +4639,7 @@ function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingR
                       {(r.selectedAgents || []).map(a => (
                         <div key={a} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <span style={{ fontSize: 13, color: C.text, minWidth: 110, fontWeight: 600 }}>{a}</span>
-                          <input type="number" value={newEntry.agents[a] || ""} placeholder="0"
+                          <input type="text" inputMode="decimal" value={newEntry.agents[a] || ""} placeholder="0"
                             onChange={e => setNewEntry(n => ({...n, agents: {...n.agents, [a]: e.target.value}}))}
                             style={{ ...iS, width: 120 }} />
                         </div>
@@ -4653,7 +4664,7 @@ function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingR
                               {tt.label || tt.type}
                               <span style={{ fontSize: 10, color: C.muted, fontWeight: 400, marginLeft: 4 }}>(net ${net.toFixed(2)})</span>
                             </span>
-                            <input type="number" value={newEntry.ticketTypeCounts?.[tt.id] || ""} placeholder="0"
+                            <input type="text" inputMode="decimal" value={newEntry.ticketTypeCounts?.[tt.id] || ""} placeholder="0"
                               onChange={e => setNewEntry(n => ({...n, ticketTypeCounts: {...(n.ticketTypeCounts||{}), [tt.id]: +e.target.value}}))}
                               style={{ ...iS, width: 120 }} />
                           </div>
@@ -4666,10 +4677,10 @@ function TicketingTab({ shows, showData, artist, ticketingRecords, setTicketingR
                 {/* VIP */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
                   <div><Label>VIP Sold</Label>
-                    <input type="number" value={newEntry.vipSold || ""} placeholder="0"
+                    <input type="text" inputMode="decimal" value={newEntry.vipSold || ""} placeholder="0"
                       onChange={e => setNewEntry(n => ({...n, vipSold: e.target.value}))} style={iS} /></div>
                   <div><Label>VIP Limit</Label>
-                    <input type="number" value={newEntry.vipLimit || ""} placeholder="0"
+                    <input type="text" inputMode="decimal" value={newEntry.vipLimit || ""} placeholder="0"
                       onChange={e => setNewEntry(n => ({...n, vipLimit: e.target.value}))} style={iS} /></div>
                 </div>
 
