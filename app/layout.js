@@ -1,3 +1,5 @@
+import './globals.css'
+
 export const metadata = {
   title: 'UDO — Silverback Touring',
   description: 'Tour budgeting, research and planning platform',
