@@ -3412,7 +3412,7 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
 
 // ─── SHOW BY SHOW TAB ─────────────────────────────────────────────────────
 // ─── NUMFIELD — text input that behaves like a number field ────────────────
-function NumField({ value, onChange, style, placeholder = "0" }) {
+function NumField({ value, onChange, style, placeholder = "0", dataRow, dataCol, totalCols }) {
   const [localVal, setLocalVal] = React.useState(value ? String(value) : "");
   const focused = React.useRef(false);
 
@@ -3427,10 +3427,34 @@ function NumField({ value, onChange, style, placeholder = "0" }) {
     onChange(isNaN(n) ? 0 : n);
   };
 
-  const moveToNext = (el, reverse) => {
+  const moveToNext = (el, reverse, isEnter) => {
+    // If in the SBS grid (has dataRow/dataCol), navigate by grid position
+    if (dataRow !== undefined && dataCol !== undefined) {
+      const grid = document.querySelectorAll('[data-sbs-input]');
+      const inputs = Array.from(grid);
+      const cur = inputs.find(x => +x.dataset.sbsRow === dataRow && +x.dataset.sbsCol === dataCol);
+      if (cur && inputs.length) {
+        let nextRow = dataRow, nextCol = dataCol;
+        if (isEnter) {
+          // Enter = next row, same column
+          nextRow = dataRow + 1;
+        } else if (reverse) {
+          // Shift+Tab = prev col, or prev row last col
+          nextCol = dataCol - 1;
+          if (nextCol < 0) { nextRow = dataRow - 1; nextCol = (totalCols||1) - 1; }
+        } else {
+          // Tab = next col, or next row first col
+          nextCol = dataCol + 1;
+          if (nextCol >= (totalCols||1)) { nextRow = dataRow + 1; nextCol = 0; }
+        }
+        const target = inputs.find(x => +x.dataset.sbsRow === nextRow && +x.dataset.sbsCol === nextCol);
+        if (target) { target.focus(); target.select && target.select(); return; }
+      }
+    }
+    // Fallback: find next visible input in DOM
     const all = Array.from(document.querySelectorAll(
       'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])'
-    )).filter(el => el.offsetParent !== null); // only visible
+    )).filter(x => x.offsetParent !== null);
     const idx = all.indexOf(el);
     const next = reverse ? all[idx - 1] : all[idx + 1];
     if (next) { next.focus(); next.select && next.select(); }
@@ -3442,6 +3466,9 @@ function NumField({ value, onChange, style, placeholder = "0" }) {
       inputMode="decimal"
       value={localVal}
       placeholder={placeholder}
+      data-sbs-input={dataRow !== undefined ? "1" : undefined}
+      data-sbs-row={dataRow}
+      data-sbs-col={dataCol}
       onFocus={e => {
         focused.current = true;
         e.target.select();
@@ -3462,12 +3489,12 @@ function NumField({ value, onChange, style, placeholder = "0" }) {
         if (e.key === "Tab") {
           e.preventDefault();
           commit(e.target.value);
-          moveToNext(e.target, e.shiftKey);
+          moveToNext(e.target, e.shiftKey, false);
         }
         if (e.key === "Enter") {
           e.preventDefault();
           commit(e.target.value);
-          moveToNext(e.target, false);
+          moveToNext(e.target, false, true);
         }
         // Tab: commit value but let browser handle focus movement naturally
         if (e.key === "Tab") {
@@ -3732,16 +3759,23 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
     );
 
     const COL_SHADES = ["rgba(255,255,255,0)", "rgba(255,255,255,0.03)", "rgba(249,115,22,0.04)", "rgba(255,255,255,0.05)"];
-    let tabIdx = 100; // sequential tab index across all rows
+    let rowCounter = 0;
     const DataRow = ({ label, values, total, color, isInput, field }) => {
-      const tabs = []; // tabIndex handled by NumField's own moveToNext logic
+      const rowIdx = isInput ? rowCounter++ : -1;
       return (
         <div style={{ display: "grid", gridTemplateColumns: colW, borderTop: `1px solid ${C.border}`, alignItems: "stretch" }}>
           <span style={{ fontSize: 11, color: C.muted, padding: "5px 8px", alignSelf:"center" }}>{label}</span>
           {showData.map((s, i) => (
             <div key={i} style={{ background: COL_SHADES[i % COL_SHADES.length], borderLeft: `2px solid ${i % 2 === 0 ? C.border : "rgba(249,115,22,0.3)"}`, padding: "3px 5px" }}>
               {isInput
-                ? <NumField value={s[field]} onChange={n => updShow(i, field, n)} style={{ ...iS, padding: "3px 5px", fontSize: 11, background:"transparent", border:"none", borderBottom:`1px solid ${C.border}` }} />
+                ? <NumField
+                    value={s[field]}
+                    onChange={n => updShow(i, field, n)}
+                    style={{ ...iS, padding: "3px 5px", fontSize: 11, background:"transparent", border:"none", borderBottom:`1px solid ${C.border}` }}
+                    dataRow={rowIdx}
+                    dataCol={i}
+                    totalCols={showData.length}
+                  />
                 : <span style={{ fontSize: 11, color: color || C.text, padding:"4px 2px", display:"block" }}>{values ? fmt(values[i]) : "—"}</span>
               }
             </div>
