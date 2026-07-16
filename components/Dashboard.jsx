@@ -2108,6 +2108,7 @@ export default function App() {
             vipItems={vipItems} setVipItems={setVipItems}
             deposits={deposits} setDeposits={setDeposits}
             blankSBShow={blankSBShow}
+            expenses={expenses}
           />
         </div>
       )}
@@ -3411,7 +3412,7 @@ function TicketScalingTab({ ticketTypes, setTicketTypes, vipPackageCost, setVipP
 
 // ─── SHOW BY SHOW TAB ─────────────────────────────────────────────────────
 // ─── NUMFIELD — text input that behaves like a number field ────────────────
-function NumField({ value, onChange, style, placeholder = "0", tabIndex }) {
+function NumField({ value, onChange, style, placeholder = "0" }) {
   const [localVal, setLocalVal] = React.useState(value ? String(value) : "");
   const focused = React.useRef(false);
 
@@ -3426,13 +3427,21 @@ function NumField({ value, onChange, style, placeholder = "0", tabIndex }) {
     onChange(isNaN(n) ? 0 : n);
   };
 
+  const moveToNext = (el, reverse) => {
+    const all = Array.from(document.querySelectorAll(
+      'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])'
+    )).filter(el => el.offsetParent !== null); // only visible
+    const idx = all.indexOf(el);
+    const next = reverse ? all[idx - 1] : all[idx + 1];
+    if (next) { next.focus(); next.select && next.select(); }
+  };
+
   return (
     <input
       type="text"
       inputMode="decimal"
       value={localVal}
       placeholder={placeholder}
-      tabIndex={tabIndex}
       onFocus={e => {
         focused.current = true;
         e.target.select();
@@ -3445,18 +3454,20 @@ function NumField({ value, onChange, style, placeholder = "0", tabIndex }) {
       }}
       onChange={e => {
         const raw = e.target.value;
-        if (/^-?[0-9]*\.?[0-9]*$/.test(raw) || raw === "" || raw === "-") {
+        if (/^-?[0-9]*[.]?[0-9]*$/.test(raw) || raw === "" || raw === "-") {
           setLocalVal(raw);
         }
       }}
       onKeyDown={e => {
+        if (e.key === "Tab") {
+          e.preventDefault();
+          commit(e.target.value);
+          moveToNext(e.target, e.shiftKey);
+        }
         if (e.key === "Enter") {
           e.preventDefault();
           commit(e.target.value);
-          // Move to next focusable input
-          const all = Array.from(document.querySelectorAll('input, select, textarea, button'));
-          const idx = all.indexOf(e.target);
-          if (idx >= 0 && all[idx + 1]) all[idx + 1].focus();
+          moveToNext(e.target, false);
         }
         // Tab: commit value but let browser handle focus movement naturally
         if (e.key === "Tab") {
@@ -3468,7 +3479,7 @@ function NumField({ value, onChange, style, placeholder = "0", tabIndex }) {
   );
 }
 
-function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTicketingRecords, ticketTypes, vipPackageCost, showData, setShowData, national, setNational, vipItems, setVipItems, deposits, setDeposits, blankSBShow }) {
+function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTicketingRecords, ticketTypes, vipPackageCost, showData, setShowData, national, setNational, vipItems, setVipItems, deposits, setDeposits, blankSBShow, expenses }) {
 
   // ── ADD/REMOVE SHOWS DIRECTLY — uses blankSBShow() from App level ──
 
@@ -3700,9 +3711,17 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
   );
 
   // ── TABLE VIEW ──────────────────────────────────────────────────────────
+  const [compactView, setCompactView] = useState(false);
+
+  const showCode = (s, i) => {
+    const city = (s.city || `S${i+1}`).replace(/\s+/g, "").toUpperCase().slice(0, 3);
+    const date = s.date ? new Date(s.date).toLocaleDateString("en-AU", { day:"2-digit", month:"2-digit" }).replace("/","") : String(i+1).padStart(2,"0");
+    return `${city}${date}`;
+  };
+
   const tableViewJSX = (() => {
-    const cols = ["", ...showData.map((s, i) => `Show ${i + 1}`), "TOTAL"];
-    const colW = `repeat(${numShows + 2}, 1fr)`;
+    const COL_MIN = compactView ? "90px" : "130px";
+    const colW = `180px repeat(${numShows}, minmax(${COL_MIN}, ${compactView ? "120px" : "1fr"})) 120px`;
 
     const HeaderRow = ({ label, accent }) => (
       <div style={{ display: "grid", gridTemplateColumns: colW, gap: 4, background: accent ? "rgba(249,115,22,0.15)" : C.card, padding: "6px 8px", borderTop: `1px solid ${C.border}` }}>
@@ -3715,16 +3734,14 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
     const COL_SHADES = ["rgba(255,255,255,0)", "rgba(255,255,255,0.03)", "rgba(249,115,22,0.04)", "rgba(255,255,255,0.05)"];
     let tabIdx = 100; // sequential tab index across all rows
     const DataRow = ({ label, values, total, color, isInput, field }) => {
-      const startTab = tabIdx;
-      if (isInput) tabIdx += showData.length;
-      const tabs = isInput ? showData.map((_, i) => startTab + i) : [];
+      const tabs = []; // tabIndex handled by NumField's own moveToNext logic
       return (
         <div style={{ display: "grid", gridTemplateColumns: colW, borderTop: `1px solid ${C.border}`, alignItems: "stretch" }}>
           <span style={{ fontSize: 11, color: C.muted, padding: "5px 8px", alignSelf:"center" }}>{label}</span>
           {showData.map((s, i) => (
             <div key={i} style={{ background: COL_SHADES[i % COL_SHADES.length], borderLeft: `2px solid ${i % 2 === 0 ? C.border : "rgba(249,115,22,0.3)"}`, padding: "3px 5px" }}>
               {isInput
-                ? <NumField value={s[field]} onChange={n => updShow(i, field, n)} style={{ ...iS, padding: "3px 5px", fontSize: 11, background:"transparent", border:"none", borderBottom:`1px solid ${C.border}` }} tabIndex={tabs[i]} />
+                ? <NumField value={s[field]} onChange={n => updShow(i, field, n)} style={{ ...iS, padding: "3px 5px", fontSize: 11, background:"transparent", border:"none", borderBottom:`1px solid ${C.border}` }} />
                 : <span style={{ fontSize: 11, color: color || C.text, padding:"4px 2px", display:"block" }}>{values ? fmt(values[i]) : "—"}</span>
               }
             </div>
@@ -3745,15 +3762,16 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
     return (
       <div style={{ overflowX: "auto" }}>
         {/* Show headers */}
-        <div style={{ display: "grid", gridTemplateColumns: colW, gap: 4, padding: "8px 8px", background: C.panel, borderBottom: `1px solid ${C.border}` }}>
-          <span style={{ fontSize: 11, color: C.muted, textTransform: "uppercase" }}>Show</span>
+        <div style={{ display: "grid", gridTemplateColumns: colW, background: C.panel, borderBottom: `1px solid ${C.border}` }}>
+          <span style={{ fontSize: 11, color: C.muted, textTransform: "uppercase", padding: "8px 8px", alignSelf:"center" }}>Show</span>
           {showData.map((s, i) => (
-            <div key={i} style={{ fontSize: 11, fontWeight: 700, color: C.accent }}>
-              <div>{s.city || `Show ${i + 1}`}</div>
-              <div style={{ color: C.muted, fontWeight: 400 }}>{s.venue}</div>
+            <div key={i} style={{ padding: "6px 8px", borderLeft: `2px solid ${COL_SHADES[i % COL_SHADES.length] === "rgba(255,255,255,0)" ? C.border : "rgba(249,115,22,0.4)"}` }}>
+              <div style={{ fontSize: compactView ? 10 : 11, fontWeight: 800, color: C.accent, letterSpacing: 0.5 }}>{showCode(s, i)}</div>
+              {!compactView && <div style={{ fontSize: 10, color: C.text, fontWeight: 600 }}>{s.city || `Show ${i+1}`}</div>}
+              {!compactView && <div style={{ fontSize: 10, color: C.muted }}>{s.venue}</div>}
             </div>
           ))}
-          <span style={{ fontSize: 11, fontWeight: 700, color: C.textDim }}>NATIONAL</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.textDim, padding: "8px 8px", alignSelf:"center" }}>TOTAL</span>
         </div>
 
         {/* TICKET REVENUE */}
@@ -3808,6 +3826,10 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
         <DataRow label="Marketing (share)" values={calcs.map(c=>c.mktg)} total={national.marketing} />
         <DataRow label="Contingency (share)" values={calcs.map(()=>natPerShow.contingency||0)} total={national.contingency} />
         <DataRow label="Passes (share)" values={calcs.map(()=>natPerShow.passes||0)} total={national.passes} />
+
+        {/* AD-HOC EXPENSES */}
+        <DataRow label="Ad-hoc Expenses" values={showData.map((_,i) => (expenses||[]).filter(e=>+e.showIdx===i).reduce((a,e)=>a+(+e.amount||0),0))}
+          total={(expenses||[]).filter(e=>e.showIdx>=0).reduce((a,e)=>a+(+e.amount||0),0)} color={C.yellow} />
 
         {/* P&L */}
         <TotalRow label="TOTAL COSTS" values={calcs.map(c=>c.totalCosts)} total={totals.totalCosts} color={v=>C.red} />
