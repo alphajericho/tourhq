@@ -770,6 +770,9 @@ export default function App() {
       if (p.national) setNational(p.national);
       if (p.vipItems) setVipItems(p.vipItems);
       if (p.deposits) setDeposits(p.deposits);
+    if (p.merchItems) setMerchItems(p.merchItems);
+    if (p.merchSales) setMerchSales(p.merchSales);
+    if (p.expenses) setExpenses(p.expenses);
       setShowTourPanel(false);
       setSaveMsg(`✅ Loaded: ${tour.name}`);
       setTimeout(() => setSaveMsg(""), 3000);
@@ -796,7 +799,7 @@ export default function App() {
 
   const saveTour = async () => {
     setSaving(true);
-    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues };
+    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues, merchItems, merchSales, expenses };
     // Always save to localStorage first — instant, never fails
     saveToLocal(activeTourId, tourName, payload);
     try {
@@ -836,6 +839,9 @@ export default function App() {
     setNational({ intlFlights: 0, visas: 0, insurance: 0, passes: 0, marketing: 0, contingency: 0, artistFee: 0, artistFeeCurrency: 'USD' });
     setVipItems([{ label: "Poster", cost: 0 }, { label: "Laminate", cost: 0 }, { label: "Lanyard", cost: 0 }]);
     setDeposits([]);
+    setMerchItems([]);
+    setMerchSales({});
+    setExpenses([]);
   };
 
   const newTour = () => {
@@ -901,6 +907,9 @@ export default function App() {
   const removeShow = useCallback((i) => setShows(prev => prev.filter((_, j) => j !== i)), []);
   const addShow = () => setShows(prev => [...prev, defaultShow()]);
   const [showImport, setShowImport] = useState(false);
+  const [merchItems, setMerchItems] = useState([]); // [{id, name, cost, shipping}]
+  const [merchSales, setMerchSales] = useState({}); // {showIdx: {itemId: {gross, units}}}
+  const [expenses, setExpenses] = useState([]); // [{id, amount, date, showIdx, paidBy, notes}]
   const [importText, setImportText] = useState("");
   const [importParsing, setImportParsing] = useState(false);
   const [importPreview, setImportPreview] = useState(null);
@@ -981,8 +990,8 @@ export default function App() {
     city: s?.city || "", venue: s?.venueName || s?.venue || "", cap: s?.cap || 0, date: s?.date || "",
     catAPrice: s?.ticketPrice || 0, catACap: s?.cap || 0, catAForecast: s?.attendPct || 0.6,
     catBPrice: 0, catBCap: 0, catBForecast: 0.6,
-    venueFlat: s?.flatHire || 0, venuePerHead: 5.5, apra: 0,
-    domFlights: 0, accom: 0, transfers: 0, vanHire: 0, drivers: 0,
+    venueFlat: s?.flatHire || 0, venuePerHead: 5.5, venueHirePct: 0, apra: 0,
+    domFlights: 0, accom: 0, dayOffAccom: 0, dayOffCity: "", transfers: 0, vanHire: 0, drivers: 0,
     advancingProd: 0, prodMgr: 0, tourMgr: 0, tourMgrOffDays: 0,
     opsMgr: 0, stagehands: 0, runners: 0, tourStaff: 0,
     perDiems: 0, catering: 0, supports: 0, backline: 0,
@@ -1157,7 +1166,7 @@ export default function App() {
   const autoSave = useCallback(async () => {
     if (!activeTourId) return;
     setAutoSaveStatus("saving");
-    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues };
+    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues, merchItems, merchSales, expenses };
     // Always back up locally first
     saveToLocal(activeTourId, tourName, payload);
     try {
@@ -1321,6 +1330,8 @@ export default function App() {
           ["ticketscaling","🎟️ Ticket Scaling"],
           ["showbyshow","📋 Show By Show"],
           ["ticketing","🎫 Ticket Counts"],
+          ["merch","👕 Merch"],
+          ["expenses","🧾 Expenses"],
           ["venues","🏟️ Venue Database"],
           ["research","📊 Artist Research"],
         ].map(([id,label]) => <Tab key={id} label={label} active={tab===id} onClick={() => setTab(id)} />)}
@@ -2109,6 +2120,18 @@ export default function App() {
       )}
 
       {/* ── VENUE DATABASE TAB ── */}
+      {tab === "merch" && (
+        <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
+          <MerchTab showData={showData} merchItems={merchItems} setMerchItems={setMerchItems} merchSales={merchSales} setMerchSales={setMerchSales} />
+        </div>
+      )}
+
+      {tab === "expenses" && (
+        <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
+          <ExpensesTab showData={showData} expenses={expenses} setExpenses={setExpenses} />
+        </div>
+      )}
+
       {tab === "venues" && (
         <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
           <VenueTab venues={venues} setVenues={setVenues} />
@@ -2307,6 +2330,245 @@ function VenueForm({ initial, onSave, onCancel, title }) {
           Cancel
         </button>
       </div>
+    </div>
+  );
+}
+
+
+// ─── MERCH TAB ──────────────────────────────────────────────────────────────
+function MerchTab({ showData, merchItems, setMerchItems, merchSales, setMerchSales }) {
+  const [newItem, setNewItem] = useState({ name: "", cost: 0, shipping: 0 });
+  const iS = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" };
+  const fmt = (n) => "$" + (n||0).toLocaleString("en-AU", { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+  const addItem = () => {
+    if (!newItem.name.trim()) return;
+    setMerchItems(prev => [...prev, { ...newItem, id: Date.now() }]);
+    setNewItem({ name: "", cost: 0, shipping: 0 });
+  };
+
+  const getSale = (showIdx, itemId) => merchSales?.[showIdx]?.[itemId] || { gross: 0, units: 0 };
+  const setSale = (showIdx, itemId, key, val) => {
+    setMerchSales(prev => ({
+      ...prev,
+      [showIdx]: { ...(prev[showIdx]||{}), [itemId]: { ...getSale(showIdx, itemId), [key]: +val } }
+    }));
+  };
+
+  const GST_RATE = 1/11;
+  const FACILITY_PCT = 0.05; // 5% square/facility fee
+
+  const itemTotal = (itemId) => {
+    let gross = 0;
+    showData.forEach((_, i) => { gross += getSale(i, itemId).gross || 0; });
+    const gst = gross * GST_RATE;
+    const facility = gross * FACILITY_PCT;
+    return { gross, gst, facility, net: gross - gst - facility };
+  };
+
+  const showTotal = (showIdx) => {
+    let gross = 0;
+    (merchItems||[]).forEach(item => { gross += getSale(showIdx, item.id).gross || 0; });
+    const gst = gross * GST_RATE;
+    const facility = gross * FACILITY_PCT;
+    return { gross, gst, facility, net: gross - gst - facility };
+  };
+
+  const grandTotal = () => {
+    let gross = 0;
+    (merchItems||[]).forEach(item => { gross += itemTotal(item.id).gross; });
+    const gst = gross * GST_RATE;
+    const facility = gross * FACILITY_PCT;
+    return { gross, gst, facility, net: gross - gst - facility };
+  };
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+        <div>
+          <div style={{ fontSize:18, fontWeight:800, color:C.text }}>👕 Merchandise</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Define items below — enter sales per show. Net is after GST and facility fees (5%).</div>
+        </div>
+      </div>
+
+      {/* Add item form */}
+      <div style={{ background:C.panel, borderRadius:10, padding:16, marginBottom:20, border:`1px solid ${C.border}` }}>
+        <div style={{ fontSize:12, fontWeight:700, color:C.muted, marginBottom:10, textTransform:"uppercase" }}>Add Merch Item</div>
+        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr auto", gap:10, alignItems:"flex-end" }}>
+          <div><Label>Item Name</Label><input value={newItem.name} onChange={e=>setNewItem(x=>({...x,name:e.target.value}))} placeholder="e.g. T-Shirt, Hoodie, Poster" style={iS} /></div>
+          <div><Label>Cost Price ($)</Label><NumField value={newItem.cost} onChange={v=>setNewItem(x=>({...x,cost:v}))} style={iS} /></div>
+          <div><Label>Shipping ($)</Label><NumField value={newItem.shipping} onChange={v=>setNewItem(x=>({...x,shipping:v}))} style={iS} /></div>
+          <button onClick={addItem} style={{ background:C.green, border:"none", borderRadius:6, color:"#fff", padding:"9px 20px", cursor:"pointer", fontWeight:700, fontSize:13, marginBottom:12 }}>+ Add</button>
+        </div>
+      </div>
+
+      {(!merchItems||merchItems.length===0) && (
+        <div style={{ textAlign:"center", padding:40, color:C.muted, fontSize:13 }}>No merch items yet — add one above</div>
+      )}
+
+      {(merchItems||[]).length > 0 && (
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+            <thead>
+              <tr style={{ background:C.panel }}>
+                <th style={{ padding:"10px 12px", textAlign:"left", color:C.muted, fontWeight:700, fontSize:11, textTransform:"uppercase", minWidth:140 }}>Item</th>
+                <th style={{ padding:"10px 8px", color:C.muted, fontWeight:700, fontSize:11, textTransform:"uppercase", minWidth:80 }}>Cost</th>
+                {showData.map((s,i) => (
+                  <th key={i} style={{ padding:"10px 8px", color:C.accent, fontWeight:700, fontSize:11, textTransform:"uppercase", minWidth:110, borderLeft:`2px solid ${C.border}` }}>
+                    {s.city || `Show ${i+1}`}
+                  </th>
+                ))}
+                <th style={{ padding:"10px 8px", color:C.green, fontWeight:700, fontSize:11, textTransform:"uppercase", minWidth:110, borderLeft:`2px solid ${C.border}` }}>Total Net</th>
+                <th style={{ padding:"10px 8px", color:C.muted, fontWeight:700, fontSize:10, minWidth:40 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {(merchItems||[]).map((item, itemIdx) => {
+                const tot = itemTotal(item.id);
+                return (
+                  <tr key={item.id} style={{ borderTop:`1px solid ${C.border}`, background: itemIdx%2===0 ? "transparent" : "rgba(255,255,255,0.02)" }}>
+                    <td style={{ padding:"8px 12px", color:C.text, fontWeight:600 }}>
+                      <div>{item.name}</div>
+                      <div style={{ fontSize:10, color:C.muted }}>Cost: {fmt(item.cost)} + Ship: {fmt(item.shipping)}</div>
+                    </td>
+                    <td style={{ padding:"8px 8px", color:C.muted, fontSize:11 }}>
+                      {fmt(item.cost + item.shipping)}
+                    </td>
+                    {showData.map((s,i) => {
+                      const sale = getSale(i, item.id);
+                      const net = (sale.gross||0) * (1 - GST_RATE - FACILITY_PCT);
+                      return (
+                        <td key={i} style={{ padding:"6px 8px", borderLeft:`2px solid ${C.border}` }}>
+                          <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                            <NumField value={sale.gross} onChange={v=>setSale(i,item.id,"gross",v)} placeholder="Gross $" style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.text, padding:"4px 7px", fontSize:12, width:"100%" }} />
+                            <NumField value={sale.units} onChange={v=>setSale(i,item.id,"units",v)} placeholder="Units" style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, color:C.muted, padding:"3px 7px", fontSize:11, width:"100%" }} />
+                            {sale.gross > 0 && <div style={{ fontSize:10, color:C.green }}>Net: {fmt(net)}</div>}
+                          </div>
+                        </td>
+                      );
+                    })}
+                    <td style={{ padding:"8px 8px", borderLeft:`2px solid ${C.border}` }}>
+                      <div style={{ color:C.green, fontWeight:700 }}>{fmt(tot.net)}</div>
+                      <div style={{ fontSize:10, color:C.muted }}>GST: {fmt(tot.gst)}</div>
+                      <div style={{ fontSize:10, color:C.muted }}>Fee: {fmt(tot.facility)}</div>
+                    </td>
+                    <td style={{ padding:"8px 4px" }}>
+                      <button onClick={() => setMerchItems(prev => prev.filter(x=>x.id!==item.id))}
+                        style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:16 }}>×</button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {/* Show totals row */}
+              <tr style={{ borderTop:`2px solid ${C.border}`, background:C.panel }}>
+                <td style={{ padding:"8px 12px", color:C.text, fontWeight:700, fontSize:12 }}>SHOW TOTAL</td>
+                <td></td>
+                {showData.map((_,i) => {
+                  const t = showTotal(i);
+                  return (
+                    <td key={i} style={{ padding:"8px 8px", borderLeft:`2px solid ${C.border}` }}>
+                      <div style={{ color:C.green, fontWeight:700 }}>{fmt(t.net)}</div>
+                      <div style={{ fontSize:10, color:C.muted }}>Gross: {fmt(t.gross)}</div>
+                    </td>
+                  );
+                })}
+                <td style={{ padding:"8px 8px", borderLeft:`2px solid ${C.border}` }}>
+                  <div style={{ color:C.green, fontWeight:800, fontSize:14 }}>{fmt(grandTotal().net)}</div>
+                  <div style={{ fontSize:10, color:C.muted }}>Gross: {fmt(grandTotal().gross)}</div>
+                </td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── EXPENSES TAB ────────────────────────────────────────────────────────────
+function ExpensesTab({ showData, expenses, setExpenses }) {
+  const [newExp, setNewExp] = useState({ amount: 0, date: new Date().toISOString().slice(0,10), showIdx: -1, paidBy: "", notes: "" });
+  const iS = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" };
+  const fmt = (n) => "$" + (n||0).toLocaleString("en-AU", { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+  const addExpense = () => {
+    if (!newExp.amount) return;
+    setExpenses(prev => [...prev, { ...newExp, id: Date.now() }]);
+    setNewExp({ amount: 0, date: new Date().toISOString().slice(0,10), showIdx: -1, paidBy: "", notes: "" });
+  };
+
+  // Running tally per person
+  const tallyByPerson = (expenses||[]).reduce((acc, e) => {
+    const name = e.paidBy || "Unknown";
+    acc[name] = (acc[name] || 0) + (+e.amount || 0);
+    return acc;
+  }, {});
+
+  const total = (expenses||[]).reduce((a, e) => a + (+e.amount||0), 0);
+
+  return (
+    <div>
+      <div style={{ fontSize:18, fontWeight:800, color:C.text, marginBottom:4 }}>🧾 General Expenses</div>
+      <div style={{ fontSize:12, color:C.muted, marginBottom:20 }}>Ad-hoc expenses incurred on the go. Track who paid what for reimbursement.</div>
+
+      {/* Running tallies */}
+      {Object.keys(tallyByPerson).length > 0 && (
+        <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+          {Object.entries(tallyByPerson).map(([name, amt]) => (
+            <div key={name} style={{ background:C.panel, borderRadius:8, padding:"10px 16px", border:`1px solid ${C.border}` }}>
+              <div style={{ fontSize:11, color:C.muted, marginBottom:2 }}>{name}</div>
+              <div style={{ fontSize:18, fontWeight:800, color:C.accent }}>{fmt(amt)}</div>
+            </div>
+          ))}
+          <div style={{ background:C.panel, borderRadius:8, padding:"10px 16px", border:`1px solid ${C.green}` }}>
+            <div style={{ fontSize:11, color:C.muted, marginBottom:2 }}>TOTAL</div>
+            <div style={{ fontSize:18, fontWeight:800, color:C.green }}>{fmt(total)}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Add expense */}
+      <div style={{ background:C.panel, borderRadius:10, padding:16, marginBottom:20, border:`1px solid ${C.border}` }}>
+        <div style={{ fontSize:12, fontWeight:700, color:C.muted, marginBottom:10, textTransform:"uppercase" }}>Add Expense</div>
+        <div style={{ display:"grid", gridTemplateColumns:"120px 150px 1fr 1fr 2fr auto", gap:10, alignItems:"flex-end" }}>
+          <div><Label>Amount ($)</Label><NumField value={newExp.amount} onChange={v=>setNewExp(x=>({...x,amount:v}))} style={iS} /></div>
+          <div><Label>Date</Label><input type="date" value={newExp.date} onChange={e=>setNewExp(x=>({...x,date:e.target.value}))} style={iS} /></div>
+          <div>
+            <Label>Show</Label>
+            <select value={newExp.showIdx} onChange={e=>setNewExp(x=>({...x,showIdx:+e.target.value}))} style={iS}>
+              <option value={-1}>— Tour general —</option>
+              {showData.map((s,i) => <option key={i} value={i}>{s.city || `Show ${i+1}`}{s.venue ? ` — ${s.venue}` : ""}</option>)}
+            </select>
+          </div>
+          <div><Label>Paid By</Label><input value={newExp.paidBy} onChange={e=>setNewExp(x=>({...x,paidBy:e.target.value}))} placeholder="Name" style={iS} /></div>
+          <div><Label>Notes</Label><input value={newExp.notes} onChange={e=>setNewExp(x=>({...x,notes:e.target.value}))} placeholder="What was it for?" style={iS} /></div>
+          <button onClick={addExpense} style={{ background:C.green, border:"none", borderRadius:6, color:"#fff", padding:"9px 20px", cursor:"pointer", fontWeight:700, fontSize:13, marginBottom:12 }}>+ Add</button>
+        </div>
+      </div>
+
+      {/* Expenses list */}
+      {(expenses||[]).length === 0 && (
+        <div style={{ textAlign:"center", padding:40, color:C.muted, fontSize:13 }}>No expenses logged yet</div>
+      )}
+      {(expenses||[]).length > 0 && (
+        <div style={{ borderRadius:10, overflow:"hidden", border:`1px solid ${C.border}` }}>
+          <div style={{ display:"grid", gridTemplateColumns:"120px 150px 1fr 1fr 2fr 32px", gap:8, padding:"8px 14px", background:C.panel, fontSize:11, color:C.muted, textTransform:"uppercase", fontWeight:700 }}>
+            <span>Amount</span><span>Date</span><span>Show</span><span>Paid By</span><span>Notes</span><span></span>
+          </div>
+          {[...(expenses||[])].sort((a,b)=>new Date(b.date)-new Date(a.date)).map((e,idx) => (
+            <div key={e.id} style={{ display:"grid", gridTemplateColumns:"120px 150px 1fr 1fr 2fr 32px", gap:8, padding:"9px 14px", borderTop:`1px solid ${C.border}`, fontSize:13, alignItems:"center", background: idx%2===0?"transparent":"rgba(255,255,255,0.02)" }}>
+              <span style={{ color:C.green, fontWeight:700 }}>{fmt(e.amount)}</span>
+              <span style={{ color:C.muted }}>{e.date}</span>
+              <span style={{ color:C.text }}>{e.showIdx >= 0 && showData[e.showIdx] ? (showData[e.showIdx].city || `Show ${e.showIdx+1}`) : "Tour general"}</span>
+              <span style={{ color:C.accent }}>{e.paidBy || "—"}</span>
+              <span style={{ color:C.muted }}>{e.notes || "—"}</span>
+              <button onClick={() => setExpenses(prev => prev.filter(x=>x.id!==e.id))}
+                style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:16 }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -3359,10 +3621,11 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
     const forecastRev = forecastRevA + forecastRevB;
     const sellOutRev = sellOutRevA + sellOutRevB;
 
-    const venueHire = s.venueFlat + (s.venuePerHead * s.cap);
+    const venueHireFixed = (s.venueFlat || 0) + ((s.venuePerHead || 5.5) * (s.cap || 0));
+    const venueHire = venueHireFixed; // % of net added after P&L calc below
     const apra = forecastRev * 0.02;
     const compliance = apra + (natPerShow.visas || 0) + (natPerShow.insurance || 0);
-    const logistics = s.domFlights + s.accom + s.transfers + s.vanHire + s.drivers
+    const logistics = s.domFlights + s.accom + (s.dayOffAccom || 0) + s.transfers + s.vanHire + s.drivers
       + (natPerShow.intlFlights || 0);
     const showCosts = s.advancingProd + s.prodMgr + s.tourMgr + s.tourMgrOffDays
       + s.opsMgr + s.stagehands + s.runners + s.tourStaff
@@ -3381,8 +3644,11 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
 
     const totalCosts = venueHire + compliance + logistics + showCosts + production + mktg + misc + artistShare;
     const totalCostsSellOut = venueHire + compliance + logistics + showCosts + production + mktg + misc + artistShareSellOut;
-    const plForecast = forecastRev - totalCosts;
-    const plSellOut = sellOutRev - totalCostsSellOut;
+    const hirePct = (s.venueHirePct || 0) / 100;
+    const venueHirePctAmtForecast = Math.max(0, forecastRev - totalCosts) * hirePct;
+    const venueHirePctAmtSellOut = Math.max(0, sellOutRev - totalCostsSellOut) * hirePct;
+    const plForecast = forecastRev - totalCosts - venueHirePctAmtForecast;
+    const plSellOut = sellOutRev - totalCostsSellOut - venueHirePctAmtSellOut;
 
     // Live current revenue from Ticket Counts
     const liveData = getLiveNetRevenue(s, i);
@@ -3446,21 +3712,24 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
       </div>
     );
 
-    let tabCounter = 100;
+    const COL_SHADES = ["rgba(255,255,255,0)", "rgba(255,255,255,0.03)", "rgba(249,115,22,0.04)", "rgba(255,255,255,0.05)"];
+    let tabIdx = 100; // sequential tab index across all rows
     const DataRow = ({ label, values, total, color, isInput, field }) => {
-      const tabs = isInput ? showData.map(() => tabCounter++) : [];
+      const startTab = tabIdx;
+      if (isInput) tabIdx += showData.length;
+      const tabs = isInput ? showData.map((_, i) => startTab + i) : [];
       return (
-        <div style={{ display: "grid", gridTemplateColumns: colW, gap: 4, padding: "4px 8px", borderTop: `1px solid ${C.border}`, alignItems: "center" }}>
-          <span style={{ fontSize: 11, color: C.muted }}>{label}</span>
+        <div style={{ display: "grid", gridTemplateColumns: colW, borderTop: `1px solid ${C.border}`, alignItems: "stretch" }}>
+          <span style={{ fontSize: 11, color: C.muted, padding: "5px 8px", alignSelf:"center" }}>{label}</span>
           {showData.map((s, i) => (
-            <div key={i}>
+            <div key={i} style={{ background: COL_SHADES[i % COL_SHADES.length], borderLeft: `2px solid ${i % 2 === 0 ? C.border : "rgba(249,115,22,0.3)"}`, padding: "3px 5px" }}>
               {isInput
-                ? <NumField value={s[field]} onChange={n => updShow(i, field, n)} style={{ ...iS, padding: "3px 5px", fontSize: 11 }} tabIndex={tabs[i]} />
-                : <span style={{ fontSize: 11, color: color || C.text }}>{values ? fmt(values[i]) : "—"}</span>
+                ? <NumField value={s[field]} onChange={n => updShow(i, field, n)} style={{ ...iS, padding: "3px 5px", fontSize: 11, background:"transparent", border:"none", borderBottom:`1px solid ${C.border}` }} tabIndex={tabs[i]} />
+                : <span style={{ fontSize: 11, color: color || C.text, padding:"4px 2px", display:"block" }}>{values ? fmt(values[i]) : "—"}</span>
               }
             </div>
           ))}
-          <span style={{ fontSize: 11, fontWeight: 700, color: color || C.text }}>{fmt(total)}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: color || C.text, padding: "5px 8px", borderLeft:`2px solid ${C.border}`, alignSelf:"center" }}>{fmt(total)}</span>
         </div>
       );
     };
@@ -3497,12 +3766,14 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
         <HeaderRow label="🏟️ Venue Hire" />
         <DataRow label="Flat Hire" isInput field="venueFlat" total={showData.reduce((a,s)=>a+s.venueFlat,0)} />
         <DataRow label="Per Head Fee" values={calcs.map((c,i) => showData[i].venuePerHead * showData[i].cap)} total={showData.reduce((a,s)=>a+(s.venuePerHead*s.cap),0)} />
+        <DataRow label="Hire % of Net" isInput field="venueHirePct" total={0} />
         <TotalRow label="Subtotal — Venue" values={calcs.map(c=>c.venueHire)} total={calcs.reduce((a,c)=>a+c.venueHire,0)} color={v=>C.text} />
 
         {/* LOGISTICS */}
         <HeaderRow label="✈️ Logistics" />
         <DataRow label="Dom. Flights" isInput field="domFlights" total={showData.reduce((a,s)=>a+s.domFlights,0)} />
         <DataRow label="Accommodation" isInput field="accom" total={showData.reduce((a,s)=>a+s.accom,0)} />
+        <DataRow label="Day Off Accom" isInput field="dayOffAccom" total={showData.reduce((a,s)=>a+(s.dayOffAccom||0),0)} />
         <DataRow label="Transfers" isInput field="transfers" total={showData.reduce((a,s)=>a+s.transfers,0)} />
         <DataRow label="Van Hire" isInput field="vanHire" total={showData.reduce((a,s)=>a+s.vanHire,0)} />
         <DataRow label="Drivers" isInput field="drivers" total={showData.reduce((a,s)=>a+s.drivers,0)} />
@@ -3736,6 +4007,15 @@ function ShowByShowTab({ shows, artist, fx, artistAUD, ticketingRecords, setTick
             <Section title="✈️ Logistics (this show)">
               <CostRow label="Domestic Flights" i={activeCard} field="domFlights" val={s.domFlights} />
               <CostRow label="Accommodation" i={activeCard} field="accom" val={s.accom} />
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 110px", gap:6, alignItems:"center", marginBottom:4 }}>
+                <span style={{ fontSize:12, color:C.muted }}>Day Off Accom</span>
+                <NumField value={s.dayOffAccom||0} onChange={n=>updShow(activeCard,"dayOffAccom",n)} style={iS} />
+              </div>
+              <div style={{ marginBottom:8 }}>
+                <span style={{ fontSize:11, color:C.muted }}>Day Off City (if different)</span>
+                <input value={s.dayOffCity||""} onChange={e=>updShow(activeCard,"dayOffCity",e.target.value)}
+                  placeholder="e.g. Gold Coast" style={{ ...iS, marginTop:3, fontSize:12 }} />
+              </div>
               <CostRow label="Transfers" i={activeCard} field="transfers" val={s.transfers} />
               <CostRow label="Van Hire" i={activeCard} field="vanHire" val={s.vanHire} />
               <CostRow label="Drivers" i={activeCard} field="drivers" val={s.drivers} />
