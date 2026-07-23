@@ -774,6 +774,7 @@ export default function App() {
     if (p.merchSales) setMerchSales(p.merchSales);
     if (p.expenses) setExpenses(p.expenses);
     if (p.settlements) setSettlements(p.settlements);
+    if (p.finalData) setFinalData(p.finalData);
       setShowTourPanel(false);
       setSaveMsg(`✅ Loaded: ${tour.name}`);
       setTimeout(() => setSaveMsg(""), 3000);
@@ -800,7 +801,7 @@ export default function App() {
 
   const saveTour = async () => {
     setSaving(true);
-    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues, merchItems, merchSales, expenses, settlements };
+    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues, merchItems, merchSales, expenses, settlements, finalData };
     // Always save to localStorage first — instant, never fails
     saveToLocal(activeTourId, tourName, payload);
     try {
@@ -844,6 +845,7 @@ export default function App() {
     setMerchSales({});
     setExpenses([]);
     setSettlements([]);
+    setFinalData({});
   };
 
   const newTour = () => {
@@ -913,6 +915,7 @@ export default function App() {
   const [merchSales, setMerchSales] = useState({}); // {showIdx: {itemId: {gross, units}}}
   const [expenses, setExpenses] = useState([]); // [{id, amount, date, showIdx, paidBy, notes}]
   const [settlements, setSettlements] = useState([]); // one per show
+  const [finalData, setFinalData] = useState({}); // per-show final budget overrides
   const [importText, setImportText] = useState("");
   const [importParsing, setImportParsing] = useState(false);
   const [importPreview, setImportPreview] = useState(null);
@@ -1169,7 +1172,7 @@ export default function App() {
   const autoSave = useCallback(async () => {
     if (!activeTourId) return;
     setAutoSaveStatus("saving");
-    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues, merchItems, merchSales, expenses, settlements };
+    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues, merchItems, merchSales, expenses, settlements, finalData };
     // Always back up locally first
     saveToLocal(activeTourId, tourName, payload);
     try {
@@ -1189,7 +1192,7 @@ export default function App() {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(autoSave, 3000);
     return () => clearTimeout(autoSaveTimer.current);
-  }, [artist, shows, party, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues]);
+  }, [artist, shows, party, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues, expenses, settlements, finalData, merchItems, merchSales]);
   const revenueAtTargetBE = scenarioRevenue(offerTargetBE / 100);
   const maxOfferHeadroom = Math.max(0, revenueAtTargetBE - totalOpEx);
   const maxOfferHeadroomPerShow = numShows > 0 ? maxOfferHeadroom / numShows : 0;
@@ -2156,6 +2159,8 @@ export default function App() {
             ticketTypes={ticketTypes}
             artist={artist}
             fx={fx}
+            finalData={finalData}
+            setFinalData={setFinalData}
           />
         </div>
       )}
@@ -2515,14 +2520,13 @@ function MerchTab({ showData, merchItems, setMerchItems, merchSales, setMerchSal
 }
 
 // ─── FINAL SHOW SUMMARY TAB ──────────────────────────────────────────────────
-function FinalShowTab({ showData, settlements, expenses, national, party, ticketingRecords, ticketTypes, artist, fx }) {
+function FinalShowTab({ showData, settlements, expenses, national, party, ticketingRecords, ticketTypes, artist, fx, finalData, setFinalData }) {
   const [activeShow, setActiveShow] = useState(0);
   const numShows = showData.length;
 
   // Per-show override state — stores manually entered final figures
-  const [finalData, setFinalData] = useState({});
   const updF = (i, key, val) => setFinalData(prev => ({ ...prev, [i]: { ...(prev[i]||{}), [key]: val } }));
-  const getF = (i) => finalData[i] || {};
+  const getF = (i) => finalData?.[i] || {};
 
   const iS = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"6px 10px", fontSize:12, width:"100%" };
 
