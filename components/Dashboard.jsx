@@ -2556,7 +2556,6 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
     const venueProd = f.venueProd !== undefined ? +f.venueProd : (settled ? +sett.venueProduction||0 : 0);
     const venueMktg = f.venueMktg !== undefined ? +f.venueMktg : (settled ? +sett.venueMarketing||0 : 0);
     const venueMisc = f.venueMisc !== undefined ? +f.venueMisc : (settled ? +sett.venueMisc||0 : 0);
-    const venuePerHead = f.venuePerHead !== undefined ? +f.venuePerHead : ((show.venuePerHead||5.5) * (show.cap||0));
     const artistPmt = f.artistPmt !== undefined ? +f.artistPmt : (settled ? +sett.artistPayment||0 : 0);
     // GST auto-calculated as total revenue / 11 (Australian GST included in price)
     // Calculated after revenue is known — placeholder, recalculated below after totalRevenue
@@ -2607,7 +2606,7 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
     // ── MISC EXPENSES ──
     const miscExp = (expenses||[]).filter(e=>+e.showIdx===i).reduce((a,e)=>a+(+e.amount||0),0);
 
-    const totalVenue = venueHire + venuePerHead + venueProd + venueMktg + venueMisc + apra + gstPayCalc + taxes + opFees + otherDed;
+    const totalVenue = venueHire + venueProd + venueMktg + venueMisc + apra + gstPayCalc + taxes + opFees + otherDed;
     const totalLogistics = domFlights + accom + dayOffAccom + transfers + vanHire + drivers;
     const totalShowCosts = tourMgr + stagehands + tourStaff + supports + perDiems + rider;
     const totalProduction = backline + lightingTechs + miscTechs + prodAddOns;
@@ -2615,7 +2614,7 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
     const netPL = totalRevenue - totalCosts;
 
     return { settled, agentGross, agentFees, agentNet, platformSales, otherRevenue, totalRevenue,
-      venueHire, venuePerHead, venueProd, venueMktg, venueMisc, apra, gstPay: gstPayCalc, taxes, opFees, otherDed, artistPmt,
+      venueHire, venueProd, venueMktg, venueMisc, apra, gstPay: gstPayCalc, taxes, opFees, otherDed, artistPmt,
       domFlights, accom, dayOffAccom, transfers, vanHire, drivers,
       tourMgr, stagehands, tourStaff, supports, perDiems, rider,
       backline, lightingTechs, miscTechs, prodAddOns, marketing,
@@ -2731,7 +2730,6 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
 
         <HRow label="🏟️ Venue Costs" />
         <FTRow label="Flat Hire" field="venueHire" getVal={fc=>fc.venueHire} />
-        <FTRow label="Per Head" field="venuePerHead" getVal={fc=>fc.venuePerHead} />
         <FTRow label="Production" field="venueProd" getVal={fc=>fc.venueProd} />
         <FTRow label="Marketing" field="venueMktg" getVal={fc=>fc.venueMktg} />
         <FTRow label="Venue Misc" field="venueMisc" getVal={fc=>fc.venueMisc} />
@@ -2880,7 +2878,6 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
             {/* VENUE */}
             <Section title="🏟️ Venue Costs" accent={settled}>
               <FRow label="Flat Hire" field="venueHire" value={fc.venueHire} fromSettlement />
-              <FRow label="Per Head" field="venuePerHead" value={fc.venuePerHead} fromSettlement />
               <FRow label="Production" field="venueProd" value={fc.venueProd} fromSettlement />
               <FRow label="Marketing (venue)" field="venueMktg" value={fc.venueMktg} fromSettlement />
               <FRow label="Venue Misc" field="venueMisc" value={fc.venueMisc} fromSettlement />
