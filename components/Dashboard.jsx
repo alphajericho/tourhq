@@ -2549,6 +2549,7 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
     const platformSales = f.platformSales !== undefined ? +f.platformSales : (+sett.platformSales||0);
     const otherRevenue = f.otherRevenue !== undefined ? +f.otherRevenue : (+sett.otherRevenue||0);
     const totalRevenue = agentNet + platformSales + otherRevenue;
+    const gstPayCalc = totalRevenue / 11; // GST included in price, must be remitted
 
     // ── VENUE / SETTLEMENT COSTS ──
     const venueHire = f.venueHire !== undefined ? +f.venueHire : (settled ? +sett.venueHire||0 : show.venueFlat||0);
@@ -2557,7 +2558,9 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
     const venueMisc = f.venueMisc !== undefined ? +f.venueMisc : (settled ? +sett.venueMisc||0 : 0);
     const venuePerHead = f.venuePerHead !== undefined ? +f.venuePerHead : ((show.venuePerHead||5.5) * (show.cap||0));
     const artistPmt = f.artistPmt !== undefined ? +f.artistPmt : (settled ? +sett.artistPayment||0 : 0);
-    const gstPay = f.gstPay !== undefined ? +f.gstPay : (settled ? +sett.gst||0 : 0);
+    // GST auto-calculated as total revenue / 11 (Australian GST included in price)
+    // Calculated after revenue is known — placeholder, recalculated below after totalRevenue
+    const gstPay = 0; // will be set after totalRevenue
     const taxes = f.taxes !== undefined ? +f.taxes : (settled ? +sett.taxes||0 : 0);
     const rider = f.rider !== undefined ? +f.rider : (settled ? +sett.riderCost||0 : show.catering||0);
     const opFees = f.opFees !== undefined ? +f.opFees : (settled ? +sett.operatorFees||0 : 0);
@@ -2604,7 +2607,7 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
     // ── MISC EXPENSES ──
     const miscExp = (expenses||[]).filter(e=>+e.showIdx===i).reduce((a,e)=>a+(+e.amount||0),0);
 
-    const totalVenue = venueHire + venuePerHead + venueProd + venueMktg + venueMisc + apra + gstPay + taxes + opFees + otherDed;
+    const totalVenue = venueHire + venuePerHead + venueProd + venueMktg + venueMisc + apra + gstPayCalc + taxes + opFees + otherDed;
     const totalLogistics = domFlights + accom + dayOffAccom + transfers + vanHire + drivers;
     const totalShowCosts = tourMgr + stagehands + tourStaff + supports + perDiems + rider;
     const totalProduction = backline + lightingTechs + miscTechs + prodAddOns;
@@ -2612,7 +2615,7 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
     const netPL = totalRevenue - totalCosts;
 
     return { settled, agentGross, agentFees, agentNet, platformSales, otherRevenue, totalRevenue,
-      venueHire, venuePerHead, venueProd, venueMktg, venueMisc, apra, gstPay, taxes, opFees, otherDed, artistPmt,
+      venueHire, venuePerHead, venueProd, venueMktg, venueMisc, apra, gstPay: gstPayCalc, taxes, opFees, otherDed, artistPmt,
       domFlights, accom, dayOffAccom, transfers, vanHire, drivers,
       tourMgr, stagehands, tourStaff, supports, perDiems, rider,
       backline, lightingTechs, miscTechs, prodAddOns, marketing,
@@ -2733,7 +2736,11 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
         <FTRow label="Marketing" field="venueMktg" getVal={fc=>fc.venueMktg} />
         <FTRow label="Venue Misc" field="venueMisc" getVal={fc=>fc.venueMisc} />
         <FTRow label="APRA" field="apra" getVal={fc=>fc.apra} />
-        <FTRow label="GST" field="gstPay" getVal={fc=>fc.gstPay} />
+        <div style={{ display:"grid", gridTemplateColumns:colW, borderTop:`1px solid ${C.border}`, alignItems:"center", padding:"5px 8px" }}>
+          <span style={{ fontSize:11, color:C.muted }}>GST (÷11 auto) <span style={{color:C.green,fontSize:10}}>●</span></span>
+          {showData.map((_,i)=><span key={i} style={{ fontSize:11, color:C.yellow }}>{fmt(calcFinal(i).gstPay)}</span>)}
+          <span style={{ fontSize:11, fontWeight:700, color:C.yellow }}>{fmt(allFC.reduce((a,c)=>a+c.gstPay,0))}</span>
+        </div>
         <FTRow label="Taxes" field="taxes" getVal={fc=>fc.taxes} />
         <FTRow label="Operator Fees" field="opFees" getVal={fc=>fc.opFees} />
         <TotalRow label="VENUE TOTAL" getVal={fc=>fc.totalVenue} color={v=>C.red} />
@@ -2878,7 +2885,14 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
               <FRow label="Marketing (venue)" field="venueMktg" value={fc.venueMktg} fromSettlement />
               <FRow label="Venue Misc" field="venueMisc" value={fc.venueMisc} fromSettlement />
               <FRow label="APRA" field="apra" value={fc.apra} />
-              <FRow label="GST" field="gstPay" value={fc.gstPay} fromSettlement />
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 140px 100px", gap:8, alignItems:"center", padding:"4px 0", borderBottom:`1px solid ${C.border}` }}>
+                <span style={{ fontSize:12, color:C.muted }}>
+                  GST (÷11 of revenue)
+                  <span style={{ fontSize:10, color:C.green, marginLeft:6 }}>● auto-calculated</span>
+                </span>
+                <div style={{ fontSize:12, color:C.muted, fontStyle:"italic", padding:"6px 10px" }}>auto</div>
+                <span style={{ fontSize:12, fontWeight:700, color:C.yellow, textAlign:"right" }}>{fmt(fc.gstPay)}</span>
+              </div>
               <FRow label="Other Taxes" field="taxes" value={fc.taxes} fromSettlement />
               <FRow label="Operator / Box Office Fees" field="opFees" value={fc.opFees} fromSettlement />
               <SectionTotal label="VENUE TOTAL" value={fc.totalVenue} />
