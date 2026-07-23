@@ -2646,6 +2646,161 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
     </div>
   );
 
+  const [finalView, setFinalView] = useState("card"); // "card" | "table"
+
+  // ── TABLE VIEW for Final Budget ──
+  const finalTableJSX = (() => {
+    if (showData.length === 0) return <div style={{ color:C.muted, padding:24 }}>No shows set up yet.</div>;
+    const allFC = showData.map((_,i) => calcFinal(i));
+    const COL_MIN = "130px";
+    const colW = `200px repeat(${numShows}, minmax(${COL_MIN}, 1fr)) 120px`;
+    const COL_SHADES = ["rgba(255,255,255,0)","rgba(255,255,255,0.03)","rgba(249,115,22,0.04)","rgba(255,255,255,0.05)"];
+
+    const showCode2 = (s,i) => {
+      const city=(s.city||`S${i+1}`).replace(/\s+/g,"").toUpperCase().slice(0,3);
+      const date=s.date?new Date(s.date).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit"}).replace("/",""):String(i+1).padStart(2,"0");
+      return `${city}${date}`;
+    };
+
+    const HRow = ({ label }) => (
+      <div style={{ display:"grid", gridTemplateColumns:colW, background:"rgba(249,115,22,0.08)", padding:"5px 8px", borderTop:`2px solid ${C.border}` }}>
+        <span style={{ fontSize:11, fontWeight:800, color:C.accent, textTransform:"uppercase" }}>{label}</span>
+        {showData.map((_,i)=><span key={i} />)}
+        <span />
+      </div>
+    );
+
+    const FTRow = ({ label, field, getVal, color }) => {
+      const vals = showData.map((_,i) => {
+        const f = getF(i);
+        const fc = allFC[i];
+        return f[field] !== undefined ? +f[field] : (getVal ? getVal(fc) : 0);
+      });
+      const total = vals.reduce((a,v)=>a+v,0);
+      return (
+        <div style={{ display:"grid", gridTemplateColumns:colW, borderTop:`1px solid ${C.border}`, alignItems:"stretch" }}>
+          <span style={{ fontSize:11, color:C.muted, padding:"5px 8px", alignSelf:"center" }}>{label}</span>
+          {showData.map((s,i)=>(
+            <div key={i} style={{ background:COL_SHADES[i%COL_SHADES.length], borderLeft:`2px solid ${i%2===0?C.border:"rgba(249,115,22,0.3)"}`, padding:"3px 5px" }}>
+              <NumField value={getF(i)[field]!==undefined?getF(i)[field]:(getVal?getVal(allFC[i]):0)}
+                onChange={n=>updF(i,field,n)}
+                style={{ background:"transparent", border:"none", borderBottom:`1px solid ${C.border}`, color:color||C.text, fontSize:11, width:"100%", padding:"3px 5px" }} />
+            </div>
+          ))}
+          <span style={{ fontSize:11, fontWeight:700, color:color||C.text, padding:"5px 8px", borderLeft:`2px solid ${C.border}`, alignSelf:"center" }}>{fmt(total)}</span>
+        </div>
+      );
+    };
+
+    const TotalRow = ({ label, getVal, color }) => {
+      const vals = showData.map((_,i) => getVal(allFC[i]));
+      const total = vals.reduce((a,v)=>a+v,0);
+      return (
+        <div style={{ display:"grid", gridTemplateColumns:colW, borderTop:`2px solid ${C.border}`, background:C.panel, padding:"6px 8px", alignItems:"center" }}>
+          <span style={{ fontSize:12, fontWeight:800, color:C.text }}>{label}</span>
+          {vals.map((v,i)=><span key={i} style={{ fontSize:12, fontWeight:700, color:color||(v>=0?C.green:C.red) }}>{fmt(v)}</span>)}
+          <span style={{ fontSize:13, fontWeight:800, color:color||(total>=0?C.green:C.red) }}>{fmt(total)}</span>
+        </div>
+      );
+    };
+
+    return (
+      <div style={{ overflowX:"auto" }}>
+        {/* Header */}
+        <div style={{ display:"grid", gridTemplateColumns:colW, background:C.panel, borderBottom:`1px solid ${C.border}`, padding:"8px 8px" }}>
+          <span style={{ fontSize:11, color:C.muted, textTransform:"uppercase" }}>Line Item</span>
+          {showData.map((s,i)=>(
+            <div key={i} style={{ padding:"4px 8px", borderLeft:`2px solid ${i%2===0?C.border:"rgba(249,115,22,0.4)"}` }}>
+              <div style={{ fontSize:11, fontWeight:800, color:C.accent }}>{showCode2(s,i)}</div>
+              <div style={{ fontSize:10, color:C.text }}>{s.city}</div>
+              <div style={{ fontSize:10, color:C.muted }}>{s.venue}</div>
+              <div style={{ fontSize:10, color:hasS(i)?C.green:C.yellow }}>{hasS(i)?"✅ Settled":"📊 Estimate"}</div>
+            </div>
+          ))}
+          <span style={{ fontSize:11, fontWeight:700, color:C.textDim }}>TOTAL</span>
+        </div>
+
+        <HRow label="💰 Revenue" />
+        <FTRow label="Net Ticket Revenue" field="agentNet" getVal={fc=>fc.agentNet} color={C.green} />
+        <FTRow label="Platform Sales" field="platformSales" getVal={fc=>fc.platformSales} />
+        <FTRow label="Other Revenue" field="otherRevenue" getVal={fc=>fc.otherRevenue} />
+        <TotalRow label="TOTAL REVENUE" getVal={fc=>fc.totalRevenue} color={C.green} />
+
+        <HRow label="🏟️ Venue Costs" />
+        <FTRow label="Flat Hire" field="venueHire" getVal={fc=>fc.venueHire} />
+        <FTRow label="Per Head" field="venuePerHead" getVal={fc=>fc.venuePerHead} />
+        <FTRow label="Production" field="venueProd" getVal={fc=>fc.venueProd} />
+        <FTRow label="Marketing" field="venueMktg" getVal={fc=>fc.venueMktg} />
+        <FTRow label="Venue Misc" field="venueMisc" getVal={fc=>fc.venueMisc} />
+        <FTRow label="APRA" field="apra" getVal={fc=>fc.apra} />
+        <FTRow label="GST" field="gstPay" getVal={fc=>fc.gstPay} />
+        <FTRow label="Taxes" field="taxes" getVal={fc=>fc.taxes} />
+        <FTRow label="Operator Fees" field="opFees" getVal={fc=>fc.opFees} />
+        <TotalRow label="VENUE TOTAL" getVal={fc=>fc.totalVenue} color={v=>C.red} />
+
+        <HRow label="🎤 Artist" />
+        <FTRow label="Artist Payment" field="artistPmt" getVal={fc=>fc.artistPmt} color={C.red} />
+
+        <HRow label="✈️ Logistics" />
+        <FTRow label="Dom. Flights" field="domFlights" getVal={fc=>fc.domFlights} />
+        <FTRow label="Accommodation" field="accom" getVal={fc=>fc.accom} />
+        <FTRow label="Day Off Accom" field="dayOffAccom" getVal={fc=>fc.dayOffAccom} />
+        <FTRow label="Transfers" field="transfers" getVal={fc=>fc.transfers} />
+        <FTRow label="Van Hire" field="vanHire" getVal={fc=>fc.vanHire} />
+        <FTRow label="Drivers" field="drivers" getVal={fc=>fc.drivers} />
+        <TotalRow label="LOGISTICS TOTAL" getVal={fc=>fc.totalLogistics} color={v=>C.red} />
+
+        <HRow label="🎭 Show Costs" />
+        <FTRow label="Tour Manager" field="tourMgr" getVal={fc=>fc.tourMgr} />
+        <FTRow label="Stagehands" field="stagehands" getVal={fc=>fc.stagehands} />
+        <FTRow label="Tour Staff" field="tourStaff" getVal={fc=>fc.tourStaff} />
+        <FTRow label="Support Acts" field="supports" getVal={fc=>fc.supports} />
+        <FTRow label="Per Diems" field="perDiems" getVal={fc=>fc.perDiems} />
+        <FTRow label="Rider / Catering" field="rider" getVal={fc=>fc.rider} />
+        <TotalRow label="SHOW COSTS TOTAL" getVal={fc=>fc.totalShowCosts} color={v=>C.red} />
+
+        <HRow label="🎛️ Production" />
+        <FTRow label="Backline" field="backline" getVal={fc=>fc.backline} />
+        <FTRow label="Lighting Op" field="lightingTechs" getVal={fc=>fc.lightingTechs} />
+        <FTRow label="Misc Techs / FOH" field="miscTechs" getVal={fc=>fc.miscTechs} />
+        <FTRow label="Additional Production" field="prodAddOns" getVal={fc=>fc.prodAddOns} />
+        <TotalRow label="PRODUCTION TOTAL" getVal={fc=>fc.totalProduction} color={v=>C.red} />
+
+        <HRow label="📣 Marketing" />
+        <FTRow label="Show Marketing" field="marketing" getVal={fc=>fc.marketing} />
+
+        <HRow label="🌐 National (Allocated)" />
+        {(() => {
+          const vals = showData.map((_,i)=>calcFinal(i).nationalAllocated);
+          const total = vals.reduce((a,v)=>a+v,0);
+          return (
+            <div style={{ display:"grid", gridTemplateColumns:colW, borderTop:`1px solid ${C.border}`, alignItems:"center", padding:"5px 8px" }}>
+              <span style={{ fontSize:11, color:C.muted }}>Artist fee, flights, passes, contingency</span>
+              {vals.map((v,i)=><span key={i} style={{ fontSize:11, color:C.text }}>{fmt(v)}</span>)}
+              <span style={{ fontSize:11, fontWeight:700, color:C.text }}>{fmt(total)}</span>
+            </div>
+          );
+        })()}
+
+        <HRow label="🧾 Misc Expenses" />
+        {(() => {
+          const vals = showData.map((_,i)=>(expenses||[]).filter(e=>+e.showIdx===i).reduce((a,e)=>a+(+e.amount||0),0));
+          const total = vals.reduce((a,v)=>a+v,0);
+          return (
+            <div style={{ display:"grid", gridTemplateColumns:colW, borderTop:`1px solid ${C.border}`, alignItems:"center", padding:"5px 8px" }}>
+              <span style={{ fontSize:11, color:C.muted }}>Ad-hoc expenses</span>
+              {vals.map((v,i)=><span key={i} style={{ fontSize:11, color:C.yellow }}>{fmt(v)}</span>)}
+              <span style={{ fontSize:11, fontWeight:700, color:C.yellow }}>{fmt(total)}</span>
+            </div>
+          );
+        })()}
+
+        <TotalRow label="TOTAL COSTS" getVal={fc=>fc.totalCosts} color={v=>C.red} />
+        <TotalRow label="NET P&L" getVal={fc=>fc.netPL} />
+      </div>
+    );
+  })();
+
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
@@ -2653,8 +2808,22 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
           <div style={{ fontSize:20, fontWeight:800, color:C.text }}>📊 Final Budget</div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Full per-show P&L — auto-fills from settlements and Show Estimator. All fields editable for final actuals.</div>
         </div>
+        <div style={{ display:"flex", gap:8 }}>
+          {["card","table"].map(v=>(
+            <button key={v} onClick={()=>setFinalView(v)}
+              style={{ padding:"7px 14px", borderRadius:6, border:"none", cursor:"pointer", fontWeight:700, fontSize:12,
+                background:finalView===v?C.accent:C.panel, color:finalView===v?"#fff":C.muted }}>
+              {v==="card"?"🃏 Card":"📊 Table"}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* Table view */}
+      {finalView === "table" && finalTableJSX}
+
+      {/* Card view */}
+      {finalView === "card" && <>
       {/* Show selector */}
       <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:20 }}>
         {showData.map((s,i)=>{
@@ -2829,6 +2998,7 @@ function FinalShowTab({ showData, settlements, expenses, national, party, ticket
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }
