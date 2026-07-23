@@ -773,6 +773,7 @@ export default function App() {
     if (p.merchItems) setMerchItems(p.merchItems);
     if (p.merchSales) setMerchSales(p.merchSales);
     if (p.expenses) setExpenses(p.expenses);
+    if (p.settlements) setSettlements(p.settlements);
       setShowTourPanel(false);
       setSaveMsg(`✅ Loaded: ${tour.name}`);
       setTimeout(() => setSaveMsg(""), 3000);
@@ -799,7 +800,7 @@ export default function App() {
 
   const saveTour = async () => {
     setSaving(true);
-    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues, merchItems, merchSales, expenses };
+    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues, merchItems, merchSales, expenses, settlements };
     // Always save to localStorage first — instant, never fails
     saveToLocal(activeTourId, tourName, payload);
     try {
@@ -842,6 +843,7 @@ export default function App() {
     setMerchItems([]);
     setMerchSales({});
     setExpenses([]);
+    setSettlements([]);
   };
 
   const newTour = () => {
@@ -910,6 +912,7 @@ export default function App() {
   const [merchItems, setMerchItems] = useState([]); // [{id, name, cost, shipping}]
   const [merchSales, setMerchSales] = useState({}); // {showIdx: {itemId: {gross, units}}}
   const [expenses, setExpenses] = useState([]); // [{id, amount, date, showIdx, paidBy, notes}]
+  const [settlements, setSettlements] = useState([]); // one per show
   const [importText, setImportText] = useState("");
   const [importParsing, setImportParsing] = useState(false);
   const [importPreview, setImportPreview] = useState(null);
@@ -1166,7 +1169,7 @@ export default function App() {
   const autoSave = useCallback(async () => {
     if (!activeTourId) return;
     setAutoSaveStatus("saving");
-    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues, merchItems, merchSales, expenses };
+    const payload = { artist, shows, party, fx, ticketTypes, vipPackageCost, ticketingRecords, showData, national, vipItems, deposits, venues, merchItems, merchSales, expenses, settlements };
     // Always back up locally first
     saveToLocal(activeTourId, tourName, payload);
     try {
@@ -1327,11 +1330,13 @@ export default function App() {
       <div style={{ padding: "0 24px", paddingTop: 16, display: "flex", borderBottom: `1px solid ${C.border}` }}>
         {[
           ["estimator","💰 Budget Estimator"],
+          ["showbyshow","📋 Show Estimator"],
           ["ticketscaling","🎟️ Ticket Scaling"],
-          ["showbyshow","📋 Show By Show"],
           ["ticketing","🎫 Ticket Counts"],
           ["merch","👕 Merch"],
           ["expenses","🧾 Expenses"],
+          ["settlement","📑 Show Settlements"],
+          ["finalshow","📊 Final Budget"],
           ["venues","🏟️ Venue Database"],
           ["research","📊 Artist Research"],
         ].map(([id,label]) => <Tab key={id} label={label} active={tab===id} onClick={() => setTab(id)} />)}
@@ -2133,6 +2138,28 @@ export default function App() {
         </div>
       )}
 
+      {tab === "settlement" && (
+        <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
+          <SettlementTab showData={showData} settlements={settlements} setSettlements={setSettlements} ticketingRecords={ticketingRecords} />
+        </div>
+      )}
+
+      {tab === "finalshow" && (
+        <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
+          <FinalShowTab
+            showData={showData}
+            settlements={settlements}
+            expenses={expenses}
+            national={national}
+            party={party}
+            ticketingRecords={ticketingRecords}
+            ticketTypes={ticketTypes}
+            artist={artist}
+            fx={fx}
+          />
+        </div>
+      )}
+
       {tab === "venues" && (
         <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
           <VenueTab venues={venues} setVenues={setVenues} />
@@ -2486,6 +2513,631 @@ function MerchTab({ showData, merchItems, setMerchItems, merchSales, setMerchSal
     </div>
   );
 }
+
+// ─── FINAL SHOW SUMMARY TAB ──────────────────────────────────────────────────
+function FinalShowTab({ showData, settlements, expenses, national, party, ticketingRecords, ticketTypes, artist, fx }) {
+  const [activeShow, setActiveShow] = useState(0);
+  const numShows = showData.length;
+
+  // Per-show override state — stores manually entered final figures
+  const [finalData, setFinalData] = useState({});
+  const updF = (i, key, val) => setFinalData(prev => ({ ...prev, [i]: { ...(prev[i]||{}), [key]: val } }));
+  const getF = (i) => finalData[i] || {};
+
+  const iS = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"6px 10px", fontSize:12, width:"100%" };
+
+  const blankSettlement = () => ({ ticketAgentSales:[], platformSales:0, otherRevenue:0, venueHire:0, venueProduction:0, venueMarketing:0, venueMisc:0, artistPayment:0, gst:0, taxes:0, riderCost:0, operatorFees:0, otherDeductions:[], locked:false });
+  const getS = (i) => settlements?.[i] || blankSettlement();
+  const hasS = (i) => { const s=settlements?.[i]; return s&&(s.ticketAgentSales?.length>0||s.venueHire>0||s.platformSales>0); };
+
+  const showCode = (s, i) => {
+    const city = (s.city||`S${i+1}`).replace(/\s+/g,"").toUpperCase().slice(0,3);
+    const date = s.date ? new Date(s.date).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit"}).replace("/","") : String(i+1).padStart(2,"0");
+    return `${city}${date}`;
+  };
+
+  const calcFinal = (i) => {
+    const show = showData[i]||{};
+    const sett = getS(i);
+    const settled = hasS(i);
+    const f = getF(i);
+
+    // ── REVENUE ──
+    const agentNet = f.agentNet !== undefined ? +f.agentNet : (settled ? (sett.ticketAgentSales||[]).reduce((a,ag)=>a+(+ag.net||0),0) : 0);
+    const agentGross = settled ? (sett.ticketAgentSales||[]).reduce((a,ag)=>a+(+ag.gross||0),0) : agentNet;
+    const agentFees = settled ? (sett.ticketAgentSales||[]).reduce((a,ag)=>a+(+ag.fees||0),0) : 0;
+    const platformSales = f.platformSales !== undefined ? +f.platformSales : (+sett.platformSales||0);
+    const otherRevenue = f.otherRevenue !== undefined ? +f.otherRevenue : (+sett.otherRevenue||0);
+    const totalRevenue = agentNet + platformSales + otherRevenue;
+
+    // ── VENUE / SETTLEMENT COSTS ──
+    const venueHire = f.venueHire !== undefined ? +f.venueHire : (settled ? +sett.venueHire||0 : show.venueFlat||0);
+    const venueProd = f.venueProd !== undefined ? +f.venueProd : (settled ? +sett.venueProduction||0 : 0);
+    const venueMktg = f.venueMktg !== undefined ? +f.venueMktg : (settled ? +sett.venueMarketing||0 : 0);
+    const venueMisc = f.venueMisc !== undefined ? +f.venueMisc : (settled ? +sett.venueMisc||0 : 0);
+    const venuePerHead = f.venuePerHead !== undefined ? +f.venuePerHead : ((show.venuePerHead||5.5) * (show.cap||0));
+    const artistPmt = f.artistPmt !== undefined ? +f.artistPmt : (settled ? +sett.artistPayment||0 : 0);
+    const gstPay = f.gstPay !== undefined ? +f.gstPay : (settled ? +sett.gst||0 : 0);
+    const taxes = f.taxes !== undefined ? +f.taxes : (settled ? +sett.taxes||0 : 0);
+    const rider = f.rider !== undefined ? +f.rider : (settled ? +sett.riderCost||0 : show.catering||0);
+    const opFees = f.opFees !== undefined ? +f.opFees : (settled ? +sett.operatorFees||0 : 0);
+    const otherDed = settled ? (sett.otherDeductions||[]).reduce((a,d)=>a+(+d.amount||0),0) : 0;
+    const apra = f.apra !== undefined ? +f.apra : (show.apra||0);
+
+    // ── LOGISTICS ──
+    const domFlights = f.domFlights !== undefined ? +f.domFlights : (show.domFlights||0);
+    const accom = f.accom !== undefined ? +f.accom : (show.accom||0);
+    const dayOffAccom = f.dayOffAccom !== undefined ? +f.dayOffAccom : (show.dayOffAccom||0);
+    const transfers = f.transfers !== undefined ? +f.transfers : (show.transfers||0);
+    const vanHire = f.vanHire !== undefined ? +f.vanHire : (show.vanHire||0);
+    const drivers = f.drivers !== undefined ? +f.drivers : (show.drivers||0);
+
+    // ── SHOW COSTS ──
+    const tourMgr = f.tourMgr !== undefined ? +f.tourMgr : (show.tourMgr||0);
+    const stagehands = f.stagehands !== undefined ? +f.stagehands : (show.stagehands||0);
+    const tourStaff = f.tourStaff !== undefined ? +f.tourStaff : (show.tourStaff||0);
+    const supports = f.supports !== undefined ? +f.supports : (show.supports||0);
+    const perDiems = f.perDiems !== undefined ? +f.perDiems : (show.perDiems||0);
+
+    // ── PRODUCTION ──
+    const backline = f.backline !== undefined ? +f.backline : (show.backline||0);
+    const lightingTechs = f.lightingTechs !== undefined ? +f.lightingTechs : (show.lightingTechs||0);
+    const miscTechs = f.miscTechs !== undefined ? +f.miscTechs : (show.miscTechs||0);
+    const prodAddOns = f.prodAddOns !== undefined ? +f.prodAddOns : (show.prodAddOns||0);
+
+    // ── MARKETING ──
+    const marketing = f.marketing !== undefined ? +f.marketing : (show.marketing||0);
+
+    // ── NATIONAL (allocated) ──
+    const n = national||{};
+    const p = party||{};
+    const natPerShow = numShows > 0 ? {
+      artistFee: (n.artistFee||0)*(fx[n.artistFeeCurrency||"USD"]||1)/numShows,
+      intlFlights: (p.intlFlightPax||0)*(p.intlFlightCost||0)/numShows,
+      visas: (p.visaPax||0)*((p.visaFee||0)+(p.union||0))/numShows,
+      marketing: (n.marketing||0)/numShows,
+      contingency: (n.contingency||0)/numShows,
+      passes: (n.passes||0)/numShows,
+    } : {};
+    const nationalAllocated = Object.values(natPerShow).reduce((a,v)=>a+(v||0),0);
+
+    // ── MISC EXPENSES ──
+    const miscExp = (expenses||[]).filter(e=>+e.showIdx===i).reduce((a,e)=>a+(+e.amount||0),0);
+
+    const totalVenue = venueHire + venuePerHead + venueProd + venueMktg + venueMisc + apra + gstPay + taxes + opFees + otherDed;
+    const totalLogistics = domFlights + accom + dayOffAccom + transfers + vanHire + drivers;
+    const totalShowCosts = tourMgr + stagehands + tourStaff + supports + perDiems + rider;
+    const totalProduction = backline + lightingTechs + miscTechs + prodAddOns;
+    const totalCosts = artistPmt + totalVenue + totalLogistics + totalShowCosts + totalProduction + marketing + nationalAllocated + miscExp;
+    const netPL = totalRevenue - totalCosts;
+
+    return { settled, agentGross, agentFees, agentNet, platformSales, otherRevenue, totalRevenue,
+      venueHire, venuePerHead, venueProd, venueMktg, venueMisc, apra, gstPay, taxes, opFees, otherDed, artistPmt,
+      domFlights, accom, dayOffAccom, transfers, vanHire, drivers,
+      tourMgr, stagehands, tourStaff, supports, perDiems, rider,
+      backline, lightingTechs, miscTechs, prodAddOns, marketing,
+      natPerShow, nationalAllocated, miscExp,
+      totalVenue, totalLogistics, totalShowCosts, totalProduction, totalCosts, netPL };
+  };
+
+  const show = showData[activeShow]||{};
+  const sett = getS(activeShow);
+  const settled = hasS(activeShow);
+  const fc = calcFinal(activeShow);
+  const allCalcs = showData.map((_,i)=>calcFinal(i));
+
+  const FRow = ({ label, field, value, color, fromSettlement }) => (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 140px 100px", gap:8, alignItems:"center",
+      padding:"4px 0", borderBottom:`1px solid ${C.border}` }}>
+      <span style={{ fontSize:12, color:C.muted }}>
+        {label}
+        {fromSettlement && settled && <span style={{ fontSize:10, color:C.green, marginLeft:6 }}>● settled</span>}
+      </span>
+      <NumField value={getF(activeShow)[field] !== undefined ? getF(activeShow)[field] : value}
+        onChange={n=>updF(activeShow,field,n)} style={{ ...iS, fontSize:12 }} />
+      <span style={{ fontSize:12, fontWeight:700, color:color||C.text, textAlign:"right" }}>{fmt(value)}</span>
+    </div>
+  );
+
+  const SectionTotal = ({ label, value }) => (
+    <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderTop:`2px solid ${C.border}`, marginTop:4 }}>
+      <span style={{ fontSize:13, fontWeight:700, color:C.text }}>{label}</span>
+      <span style={{ fontSize:13, fontWeight:800, color:C.accent }}>{fmt(value)}</span>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+        <div>
+          <div style={{ fontSize:20, fontWeight:800, color:C.text }}>📊 Final Budget</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Full per-show P&L — auto-fills from settlements and Show Estimator. All fields editable for final actuals.</div>
+        </div>
+      </div>
+
+      {/* Show selector */}
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:20 }}>
+        {showData.map((s,i)=>{
+          const c=calcFinal(i);
+          return (
+            <button key={i} onClick={()=>setActiveShow(i)}
+              style={{ padding:"8px 14px", borderRadius:8, border:`2px solid ${activeShow===i?C.accent:C.border}`,
+                background:activeShow===i?"rgba(249,115,22,0.1)":C.panel, cursor:"pointer", textAlign:"left", minWidth:110 }}>
+              <div style={{ fontSize:11, fontWeight:800, color:activeShow===i?C.accent:C.text }}>{showCode(s,i)}</div>
+              <div style={{ fontSize:10, color:C.muted }}>{s.venue||"TBC"}</div>
+              <div style={{ fontSize:12, fontWeight:700, marginTop:3, color:c.netPL>=0?C.green:C.red }}>{fmt(c.netPL)}</div>
+              <div style={{ fontSize:9, color:c.settled?C.green:C.yellow }}>{c.settled?"✅ SETTLED":"📊 ESTIMATE"}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {showData.length === 0 && <div style={{ color:C.muted, padding:24 }}>No shows set up yet.</div>}
+
+      {showData.length > 0 && (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 280px", gap:20 }}>
+          <div>
+            {/* Source banner */}
+            <div style={{ background:settled?"rgba(34,197,94,0.08)":"rgba(249,115,22,0.06)", borderRadius:8, padding:"10px 14px", marginBottom:16, border:`1px solid ${settled?C.green:C.border}` }}>
+              <div style={{ fontSize:12, fontWeight:700, color:settled?C.green:C.yellow }}>
+                {settled?"✅ Settlement data loaded — venue costs and revenue pre-filled from settlement":"📊 No settlement yet — fields pre-filled from Show Estimator"}
+              </div>
+              <div style={{ fontSize:11, color:C.muted, marginTop:3 }}>All fields are editable. Changes here do not affect the estimator or settlement tabs.</div>
+            </div>
+
+            <div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>Left column = editable final figure. Right = current calculated value.</div>
+
+            {/* REVENUE */}
+            <Section title="💰 Revenue" accent>
+              {settled && (sett.ticketAgentSales||[]).map((ag,j)=>(
+                <div key={j} style={{ padding:"4px 0", borderBottom:`1px solid ${C.border}`, fontSize:12, display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ color:C.muted }}>{ag.agent||"Agent"} — gross {fmt(ag.gross||0)} less fees {fmt(ag.fees||0)}</span>
+                  <span style={{ color:C.green, fontWeight:700 }}>{fmt(ag.net||0)}</span>
+                </div>
+              ))}
+              <FRow label="Net Agent/Ticket Revenue" field="agentNet" value={fc.agentNet} color={C.green} fromSettlement />
+              <FRow label="Our Platform Sales" field="platformSales" value={fc.platformSales} fromSettlement />
+              <FRow label="Other Revenue" field="otherRevenue" value={fc.otherRevenue} fromSettlement />
+              <SectionTotal label="TOTAL REVENUE" value={fc.totalRevenue} />
+            </Section>
+
+            {/* VENUE */}
+            <Section title="🏟️ Venue Costs" accent={settled}>
+              <FRow label="Flat Hire" field="venueHire" value={fc.venueHire} fromSettlement />
+              <FRow label="Per Head" field="venuePerHead" value={fc.venuePerHead} fromSettlement />
+              <FRow label="Production" field="venueProd" value={fc.venueProd} fromSettlement />
+              <FRow label="Marketing (venue)" field="venueMktg" value={fc.venueMktg} fromSettlement />
+              <FRow label="Venue Misc" field="venueMisc" value={fc.venueMisc} fromSettlement />
+              <FRow label="APRA" field="apra" value={fc.apra} />
+              <FRow label="GST" field="gstPay" value={fc.gstPay} fromSettlement />
+              <FRow label="Other Taxes" field="taxes" value={fc.taxes} fromSettlement />
+              <FRow label="Operator / Box Office Fees" field="opFees" value={fc.opFees} fromSettlement />
+              <SectionTotal label="VENUE TOTAL" value={fc.totalVenue} />
+            </Section>
+
+            {/* ARTIST */}
+            <Section title="🎤 Artist">
+              <FRow label="Artist Payment" field="artistPmt" value={fc.artistPmt} color={C.red} fromSettlement />
+            </Section>
+
+            {/* LOGISTICS */}
+            <Section title="✈️ Logistics">
+              <FRow label="Dom. Flights" field="domFlights" value={fc.domFlights} />
+              <FRow label="Accommodation" field="accom" value={fc.accom} />
+              <FRow label="Day Off Accom" field="dayOffAccom" value={fc.dayOffAccom} />
+              <FRow label="Transfers" field="transfers" value={fc.transfers} />
+              <FRow label="Van Hire" field="vanHire" value={fc.vanHire} />
+              <FRow label="Drivers" field="drivers" value={fc.drivers} />
+              <SectionTotal label="LOGISTICS TOTAL" value={fc.totalLogistics} />
+            </Section>
+
+            {/* SHOW COSTS */}
+            <Section title="🎭 Show Costs">
+              <FRow label="Tour Manager" field="tourMgr" value={fc.tourMgr} />
+              <FRow label="Stagehands" field="stagehands" value={fc.stagehands} />
+              <FRow label="Tour Staff" field="tourStaff" value={fc.tourStaff} />
+              <FRow label="Support Acts" field="supports" value={fc.supports} />
+              <FRow label="Per Diems" field="perDiems" value={fc.perDiems} />
+              <FRow label="Rider / Catering" field="rider" value={fc.rider} fromSettlement />
+              <SectionTotal label="SHOW COSTS TOTAL" value={fc.totalShowCosts} />
+            </Section>
+
+            {/* PRODUCTION */}
+            <Section title="🎛️ Production">
+              <FRow label="Backline" field="backline" value={fc.backline} />
+              <FRow label="Lighting Op" field="lightingTechs" value={fc.lightingTechs} />
+              <FRow label="Misc Techs / FOH" field="miscTechs" value={fc.miscTechs} />
+              <FRow label="Additional Production" field="prodAddOns" value={fc.prodAddOns} />
+              <SectionTotal label="PRODUCTION TOTAL" value={fc.totalProduction} />
+            </Section>
+
+            {/* MARKETING */}
+            <Section title="📣 Marketing">
+              <FRow label="Show Marketing" field="marketing" value={fc.marketing} />
+            </Section>
+
+            {/* NATIONAL */}
+            <Section title="🌐 National (Allocated per show)">
+              {Object.entries(fc.natPerShow||{}).map(([k,v])=>(
+                <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:`1px solid ${C.border}`, fontSize:12 }}>
+                  <span style={{ color:C.muted, textTransform:"capitalize" }}>{k.replace(/([A-Z])/g," $1")}</span>
+                  <span style={{ color:C.text }}>{fmt(v)}</span>
+                </div>
+              ))}
+              <SectionTotal label="NATIONAL TOTAL" value={fc.nationalAllocated} />
+            </Section>
+
+            {/* MISC EXPENSES */}
+            <Section title="🧾 Misc Expenses">
+              {(expenses||[]).filter(e=>+e.showIdx===activeShow).length === 0 && (
+                <div style={{ fontSize:12, color:C.muted, fontStyle:"italic" }}>No misc expenses logged for this show — add them in the Expenses tab.</div>
+              )}
+              {(expenses||[]).filter(e=>+e.showIdx===activeShow).map((e,j)=>(
+                <div key={j} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:`1px solid ${C.border}`, fontSize:12 }}>
+                  <span style={{ color:C.muted }}>{e.notes||"Expense"}{e.paidBy?` (${e.paidBy})`:""} — {e.date||""}</span>
+                  <span style={{ color:C.red }}>–{fmt(e.amount||0)}</span>
+                </div>
+              ))}
+              <SectionTotal label="MISC TOTAL" value={fc.miscExp} />
+            </Section>
+          </div>
+
+          {/* Sticky summary */}
+          <div>
+            <div style={{ position:"sticky", top:20 }}>
+              <Section title="📊 Final P&L" accent>
+                <div style={{ fontSize:13, fontWeight:700, color:C.accent, marginBottom:12 }}>
+                  {show.city}{show.venue?` — ${show.venue}`:""}
+                </div>
+                {[
+                  ["Revenue", fc.totalRevenue, C.green],
+                  ["Venue Costs", fc.totalVenue, C.red],
+                  ["Artist", fc.artistPmt, C.red],
+                  ["Logistics", fc.totalLogistics, C.red],
+                  ["Show Costs", fc.totalShowCosts, C.red],
+                  ["Production", fc.totalProduction, C.red],
+                  ["Marketing", fc.marketing, C.red],
+                  ["National (alloc)", fc.nationalAllocated, C.red],
+                  ["Misc Expenses", fc.miscExp, C.red],
+                ].map(([l,v,c])=> v > 0 ? (
+                  <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:`1px solid ${C.border}`, fontSize:12 }}>
+                    <span style={{ color:C.muted }}>{l}</span>
+                    <span style={{ color:c, fontWeight:600 }}>{c===C.red?`–${fmt(v)}`:fmt(v)}</span>
+                  </div>
+                ) : null)}
+                <div style={{ display:"flex", justifyContent:"space-between", padding:"12px 10px", marginTop:10,
+                  background:fc.netPL>=0?"rgba(34,197,94,0.1)":"rgba(239,68,68,0.1)",
+                  borderRadius:8, border:`1px solid ${fc.netPL>=0?C.green:C.red}` }}>
+                  <span style={{ fontWeight:800, fontSize:14, color:C.text }}>NET P&L</span>
+                  <span style={{ fontWeight:900, fontSize:20, color:fc.netPL>=0?C.green:C.red }}>{fmt(fc.netPL)}</span>
+                </div>
+              </Section>
+
+              <Section title="🗺️ Tour Totals">
+                {[
+                  ["Total Revenue", allCalcs.reduce((a,c)=>a+c.totalRevenue,0), C.green],
+                  ["Total Costs", allCalcs.reduce((a,c)=>a+c.totalCosts,0), C.red],
+                  ["Net Tour P&L", allCalcs.reduce((a,c)=>a+c.netPL,0), null],
+                ].map(([l,v,c])=>(
+                  <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:`1px solid ${C.border}`, fontSize:13 }}>
+                    <span style={{ color:C.muted }}>{l}</span>
+                    <span style={{ fontWeight:700, color:c||(v>=0?C.green:C.red) }}>{fmt(v)}</span>
+                  </div>
+                ))}
+              </Section>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─── SETTLEMENT TAB ──────────────────────────────────────────────────────────
+function SettlementTab({ showData, settlements, setSettlements, ticketingRecords }) {
+  const [activeShow, setActiveShow] = useState(0);
+  const iS = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.text, padding:"7px 10px", fontSize:13, width:"100%" };
+
+  const blankSettlement = () => ({
+    // Revenue
+    ticketAgentSales: [],   // [{agent, gross, fees, net}]
+    platformSales: 0,       // our own platform
+    otherRevenue: 0,
+    otherRevenueNote: "",
+    // Deductions
+    venueHire: 0,
+    venueProduction: 0,
+    venueMarketing: 0,
+    venueMisc: 0,
+    venueMiscNote: "",
+    artistPayment: 0,
+    artistPaymentNote: "",
+    gst: 0,
+    taxes: 0,
+    riderCost: 0,
+    operatorFees: 0,
+    operatorNote: "",
+    otherDeductions: [],    // [{label, amount}]
+    // Meta
+    settledDate: "",
+    settledBy: "",
+    notes: "",
+    locked: false,
+  });
+
+  const getS = (i) => settlements[i] || blankSettlement();
+  const updS = (i, key, val) => {
+    setSettlements(prev => {
+      const next = [...prev];
+      while (next.length <= i) next.push(blankSettlement());
+      next[i] = { ...next[i], [key]: val };
+      return next;
+    });
+  };
+  const updAgent = (showIdx, agentIdx, key, val) => {
+    const s = getS(showIdx);
+    const agents = [...(s.ticketAgentSales || [])];
+    agents[agentIdx] = { ...agents[agentIdx], [key]: val };
+    updS(showIdx, "ticketAgentSales", agents);
+  };
+  const addAgent = (showIdx) => {
+    const s = getS(showIdx);
+    updS(showIdx, "ticketAgentSales", [...(s.ticketAgentSales||[]), { agent:"", gross:0, fees:0, net:0 }]);
+  };
+  const removeAgent = (showIdx, agentIdx) => {
+    const s = getS(showIdx);
+    updS(showIdx, "ticketAgentSales", s.ticketAgentSales.filter((_,j)=>j!==agentIdx));
+  };
+  const addDeduction = (showIdx) => {
+    const s = getS(showIdx);
+    updS(showIdx, "otherDeductions", [...(s.otherDeductions||[]), { label:"", amount:0 }]);
+  };
+  const updDeduction = (showIdx, dIdx, key, val) => {
+    const s = getS(showIdx);
+    const d = [...(s.otherDeductions||[])];
+    d[dIdx] = { ...d[dIdx], [key]: val };
+    updS(showIdx, "otherDeductions", d);
+  };
+
+  const calcSettlement = (s) => {
+    const agentNet = (s.ticketAgentSales||[]).reduce((a,ag)=>a+(+ag.net||0),0);
+    const agentGross = (s.ticketAgentSales||[]).reduce((a,ag)=>a+(+ag.gross||0),0);
+    const agentFees = (s.ticketAgentSales||[]).reduce((a,ag)=>a+(+ag.fees||0),0);
+    const totalRevenue = agentNet + (+s.platformSales||0) + (+s.otherRevenue||0);
+    const totalDeductions =
+      (+s.venueHire||0) + (+s.venueProduction||0) + (+s.venueMarketing||0) + (+s.venueMisc||0) +
+      (+s.artistPayment||0) + (+s.gst||0) + (+s.taxes||0) +
+      (+s.riderCost||0) + (+s.operatorFees||0) +
+      (s.otherDeductions||[]).reduce((a,d)=>a+(+d.amount||0),0);
+    const net = totalRevenue - totalDeductions;
+    return { agentGross, agentFees, agentNet, totalRevenue, totalDeductions, net };
+  };
+
+  const show = showData[activeShow] || {};
+  const settlement = getS(activeShow);
+  const calc = calcSettlement(settlement);
+
+  const SRow = ({ label, children, accent }) => (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 180px", gap:10, alignItems:"center",
+      marginBottom:6, padding:"4px 0", borderBottom:`1px solid ${C.border}`,
+      background: accent ? "rgba(249,115,22,0.04)" : "transparent" }}>
+      <span style={{ fontSize:12, color: accent ? C.accent : C.muted }}>{label}</span>
+      <div>{children}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+        <div>
+          <div style={{ fontSize:20, fontWeight:800, color:C.text }}>📑 Final Venue Settlements</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Accurate post-show financials from venue settlement sheets. Overrides estimates.</div>
+        </div>
+      </div>
+
+      {/* Show selector */}
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:20 }}>
+        {showData.map((s, i) => {
+          const settled = settlements[i]?.locked;
+          const hasData = settlements[i]?.ticketAgentSales?.length > 0 || settlements[i]?.venueHire > 0;
+          return (
+            <button key={i} onClick={() => setActiveShow(i)}
+              style={{ padding:"8px 14px", borderRadius:8, border:`2px solid ${activeShow===i ? C.accent : C.border}`,
+                background: activeShow===i ? "rgba(249,115,22,0.1)" : C.panel,
+                cursor:"pointer", textAlign:"left", minWidth:120 }}>
+              <div style={{ fontSize:11, fontWeight:800, color: activeShow===i ? C.accent : C.text }}>
+                {(s.city||"").toUpperCase().slice(0,3)}{s.date ? new Date(s.date).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit"}).replace("/","") : String(i+1).padStart(2,"0")}
+              </div>
+              <div style={{ fontSize:10, color:C.muted }}>{s.venue || "TBC"}</div>
+              {settled && <div style={{ fontSize:9, color:C.green, marginTop:2 }}>✅ SETTLED</div>}
+              {!settled && hasData && <div style={{ fontSize:9, color:C.yellow, marginTop:2 }}>⏳ IN PROGRESS</div>}
+            </button>
+          );
+        })}
+      </div>
+
+      {showData.length === 0 && (
+        <div style={{ color:C.muted, fontSize:13, padding:24 }}>No shows set up yet — add shows in the Estimator or Show by Show tab first.</div>
+      )}
+
+      {showData.length > 0 && (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 320px", gap:20 }}>
+          {/* Main form */}
+          <div>
+            {/* TICKET REVENUE */}
+            <Section title="🎟️ Ticket Revenue" accent>
+              <div style={{ fontSize:11, color:C.muted, marginBottom:10 }}>Enter per-agent totals from settlement sheet. Fees = booking/service fees deducted by agent.</div>
+              {(settlement.ticketAgentSales||[]).map((ag, j) => (
+                <div key={j} style={{ background:C.bg, borderRadius:8, padding:"10px 12px", marginBottom:8, border:`1px solid ${C.border}` }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr 28px", gap:8, alignItems:"end" }}>
+                    <div>
+                      <Label>Agent / Platform</Label>
+                      <input value={ag.agent||""} onChange={e=>updAgent(activeShow,j,"agent",e.target.value)} style={iS} placeholder="e.g. Oztix" />
+                    </div>
+                    <div>
+                      <Label>Gross Sales</Label>
+                      <NumField value={ag.gross} onChange={n=>updAgent(activeShow,j,"gross",n)} style={iS} />
+                    </div>
+                    <div>
+                      <Label>Fees Deducted</Label>
+                      <NumField value={ag.fees} onChange={n=>{updAgent(activeShow,j,"fees",n); updAgent(activeShow,j,"net",(+ag.gross||0)-n);}} style={iS} />
+                    </div>
+                    <div>
+                      <Label>Net to Promoter</Label>
+                      <NumField value={ag.net} onChange={n=>updAgent(activeShow,j,"net",n)} style={{ ...iS, color:C.green, fontWeight:700 }} />
+                    </div>
+                    <button onClick={()=>removeAgent(activeShow,j)}
+                      style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:18, paddingBottom:8 }}>×</button>
+                  </div>
+                </div>
+              ))}
+              <button onClick={()=>addAgent(activeShow)}
+                style={{ background:"none", border:`1px dashed ${C.border}`, borderRadius:6, color:C.muted, padding:"6px 16px", cursor:"pointer", fontSize:12, marginBottom:10 }}>
+                + Add Agent / Platform
+              </button>
+              <SRow label="Our Platform Sales">
+                <NumField value={settlement.platformSales||0} onChange={n=>updS(activeShow,"platformSales",n)} style={iS} />
+              </SRow>
+              <SRow label="Other Revenue" accent>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                  <NumField value={settlement.otherRevenue||0} onChange={n=>updS(activeShow,"otherRevenue",n)} style={iS} />
+                  <input value={settlement.otherRevenueNote||""} onChange={e=>updS(activeShow,"otherRevenueNote",e.target.value)} placeholder="Description" style={iS} />
+                </div>
+              </SRow>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderTop:`2px solid ${C.border}`, marginTop:4 }}>
+                <span style={{ fontWeight:700, color:C.text }}>TOTAL REVENUE</span>
+                <span style={{ fontWeight:800, fontSize:16, color:C.green }}>{fmt(calc.totalRevenue)}</span>
+              </div>
+            </Section>
+
+            {/* DEDUCTIONS */}
+            <Section title="➖ Deductions & Costs" accent>
+              <div style={{ fontSize:11, color:C.muted, marginBottom:10 }}>Enter all costs deducted at settlement — venue charges, artist payment, taxes etc.</div>
+              <SRow label="Venue Hire"><NumField value={settlement.venueHire||0} onChange={n=>updS(activeShow,"venueHire",n)} style={iS} /></SRow>
+              <SRow label="Production Costs"><NumField value={settlement.venueProduction||0} onChange={n=>updS(activeShow,"venueProduction",n)} style={iS} /></SRow>
+              <SRow label="Marketing (venue)"><NumField value={settlement.venueMarketing||0} onChange={n=>updS(activeShow,"venueMarketing",n)} style={iS} /></SRow>
+              <SRow label="Venue Misc">
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                  <NumField value={settlement.venueMisc||0} onChange={n=>updS(activeShow,"venueMisc",n)} style={iS} />
+                  <input value={settlement.venueMiscNote||""} onChange={e=>updS(activeShow,"venueMiscNote",e.target.value)} placeholder="Description" style={iS} />
+                </div>
+              </SRow>
+              <SRow label="Artist Payment">
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                  <NumField value={settlement.artistPayment||0} onChange={n=>updS(activeShow,"artistPayment",n)} style={iS} />
+                  <input value={settlement.artistPaymentNote||""} onChange={e=>updS(activeShow,"artistPaymentNote",e.target.value)} placeholder="Note e.g. USD 12000" style={iS} />
+                </div>
+              </SRow>
+              <SRow label="GST Payable"><NumField value={settlement.gst||0} onChange={n=>updS(activeShow,"gst",n)} style={iS} /></SRow>
+              <SRow label="Other Taxes"><NumField value={settlement.taxes||0} onChange={n=>updS(activeShow,"taxes",n)} style={iS} /></SRow>
+              <SRow label="Rider Costs"><NumField value={settlement.riderCost||0} onChange={n=>updS(activeShow,"riderCost",n)} style={iS} /></SRow>
+              <SRow label="Operator / Box Office Fees">
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                  <NumField value={settlement.operatorFees||0} onChange={n=>updS(activeShow,"operatorFees",n)} style={iS} />
+                  <input value={settlement.operatorNote||""} onChange={e=>updS(activeShow,"operatorNote",e.target.value)} placeholder="e.g. Square 2.2%" style={iS} />
+                </div>
+              </SRow>
+
+              {/* Other deductions */}
+              {(settlement.otherDeductions||[]).map((d,j)=>(
+                <div key={j} style={{ display:"grid", gridTemplateColumns:"1fr 130px 28px", gap:6, marginBottom:6, alignItems:"center" }}>
+                  <input value={d.label||""} onChange={e=>updDeduction(activeShow,j,"label",e.target.value)} placeholder="Description" style={iS} />
+                  <NumField value={d.amount||0} onChange={n=>updDeduction(activeShow,j,"amount",n)} style={iS} />
+                  <button onClick={()=>{
+                    const s=getS(activeShow);
+                    updS(activeShow,"otherDeductions",s.otherDeductions.filter((_,k)=>k!==j));
+                  }} style={{ background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:18 }}>×</button>
+                </div>
+              ))}
+              <button onClick={()=>addDeduction(activeShow)}
+                style={{ background:"none", border:`1px dashed ${C.border}`, borderRadius:6, color:C.muted, padding:"6px 16px", cursor:"pointer", fontSize:12 }}>
+                + Add Deduction
+              </button>
+
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderTop:`2px solid ${C.border}`, marginTop:8 }}>
+                <span style={{ fontWeight:700, color:C.text }}>TOTAL DEDUCTIONS</span>
+                <span style={{ fontWeight:800, fontSize:16, color:C.red }}>{fmt(calc.totalDeductions)}</span>
+              </div>
+            </Section>
+
+            {/* META */}
+            <Section title="📋 Settlement Details">
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+                <div><Label>Settlement Date</Label><input type="date" value={settlement.settledDate||""} onChange={e=>updS(activeShow,"settledDate",e.target.value)} style={iS} /></div>
+                <div><Label>Settled By</Label><input value={settlement.settledBy||""} onChange={e=>updS(activeShow,"settledBy",e.target.value)} placeholder="Name" style={iS} /></div>
+              </div>
+              <Label>Notes</Label>
+              <textarea value={settlement.notes||""} onChange={e=>updS(activeShow,"notes",e.target.value)}
+                rows={3} placeholder="Any discrepancies, disputes, outstanding amounts..."
+                style={{ ...iS, resize:"vertical" }} />
+              <div style={{ marginTop:12 }}>
+                <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer" }}>
+                  <input type="checkbox" checked={settlement.locked||false} onChange={e=>updS(activeShow,"locked",e.target.checked)} />
+                  <span style={{ fontSize:13, color:C.text }}>Mark as settled and locked</span>
+                </label>
+              </div>
+            </Section>
+          </div>
+
+          {/* Summary panel */}
+          <div>
+            <div style={{ position:"sticky", top:20 }}>
+              <Section title="📊 Settlement Summary" accent>
+                <div style={{ fontSize:13, fontWeight:700, color:C.accent, marginBottom:12 }}>
+                  {show.city} {show.venue && `— ${show.venue}`}
+                </div>
+                {[
+                  ["Agent Sales (gross)", fmt(calc.agentGross), C.text],
+                  ["Booking Fees", `–${fmt(calc.agentFees)}`, C.red],
+                  ["Agent Net", fmt(calc.agentNet), C.green],
+                  ["Platform Sales", fmt(settlement.platformSales||0), C.text],
+                  ["Other Revenue", fmt(settlement.otherRevenue||0), C.text],
+                ].map(([l,v,c])=>(
+                  <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:`1px solid ${C.border}`, fontSize:12 }}>
+                    <span style={{ color:C.muted }}>{l}</span>
+                    <span style={{ color:c, fontWeight:600 }}>{v}</span>
+                  </div>
+                ))}
+                <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`2px solid ${C.border}`, fontSize:13, fontWeight:700 }}>
+                  <span style={{ color:C.text }}>TOTAL REVENUE</span>
+                  <span style={{ color:C.green }}>{fmt(calc.totalRevenue)}</span>
+                </div>
+                <div style={{ height:8 }} />
+                {[
+                  ["Venue Hire", settlement.venueHire||0],
+                  ["Production", settlement.venueProduction||0],
+                  ["Marketing", settlement.venueMarketing||0],
+                  ["Venue Misc", settlement.venueMisc||0],
+                  ["Artist Payment", settlement.artistPayment||0],
+                  ["GST", settlement.gst||0],
+                  ["Other Taxes", settlement.taxes||0],
+                  ["Rider", settlement.riderCost||0],
+                  ["Operator Fees", settlement.operatorFees||0],
+                  ...((settlement.otherDeductions||[]).map(d=>[d.label||"Other", d.amount||0])),
+                ].filter(([,v])=>v>0).map(([l,v])=>(
+                  <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", fontSize:12 }}>
+                    <span style={{ color:C.muted }}>{l}</span>
+                    <span style={{ color:C.red }}>–{fmt(v)}</span>
+                  </div>
+                ))}
+                <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderTop:`2px solid ${C.border}`, marginTop:4, fontSize:13, fontWeight:700 }}>
+                  <span style={{ color:C.text }}>TOTAL DEDUCTIONS</span>
+                  <span style={{ color:C.red }}>–{fmt(calc.totalDeductions)}</span>
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between", padding:"12px 10px", marginTop:8, background: calc.net>=0?"rgba(34,197,94,0.1)":"rgba(239,68,68,0.1)", borderRadius:8, border:`1px solid ${calc.net>=0?C.green:C.red}` }}>
+                  <span style={{ fontWeight:800, fontSize:14, color:C.text }}>NET TO PROMOTER</span>
+                  <span style={{ fontWeight:900, fontSize:18, color:calc.net>=0?C.green:C.red }}>{fmt(calc.net)}</span>
+                </div>
+              </Section>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 // ─── EXPENSES TAB ────────────────────────────────────────────────────────────
 function ExpensesTab({ showData, expenses, setExpenses }) {
